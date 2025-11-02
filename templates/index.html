@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compilador Visual - Proyecto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>🧠 Compilador Gráfico Interactivo</h1>
+        <p>Proyecto de Compiladores — Ejecuta código y genera gráficos 2D/3D dinámicos</p>
+    </header>
+
+    <main>
+        <section class="editor">
+            <h2>💻 Código fuente</h2>
+            <form id="formCompilador">
+                <textarea id="codigo" spellcheck="false" placeholder="Escribe tu código aquí...&#10;&#10;Ejemplo:&#10;win2d ventana;&#10;draw2d(sin(x), -6.28, 6.28, anim=2);"></textarea>
+                <button type="submit">▶ Ejecutar</button>
+            </form>
+        </section>
+
+        <section class="output">
+            <h2>📤 Resultado</h2>
+            <div id="loader" class="loader" style="display:none;">⏳ Ejecutando...</div>
+
+            <div class="salida">
+                <pre id="salidaTexto" class="texto"></pre>
+                <div id="salidaImagen" class="imagen"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Desarrollado por <strong>Dino</strong> — Proyecto educativo de compiladores en Python 🐍</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
