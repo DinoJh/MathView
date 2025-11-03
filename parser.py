@@ -1,9 +1,3 @@
-# ============================================
-#  ANALIZADOR SINTACTICO - Proyecto Compilador Web
-#  Autor: Dino & ChatGPT
-#  Integrado con lexer.py
-# ============================================
-
 from lexer import Lexer
 
 class Parser:

@@ -1,146 +1,222 @@
-/* ==========================================
-   Estilos para el Compilador Visual Web
-   Autor: Dino & ChatGPT
-   ========================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
 body {
-  margin: 0;
-  padding: 0;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: #0e1a2a;
-  color: #eee;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 20px;
 }
 
 header {
-  background: #12263f;
-  text-align: center;
-  padding: 1rem 0;
-  border-bottom: 2px solid #00bfff;
+    text-align: center;
+    padding: 30px 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    margin-bottom: 30px;
+    backdrop-filter: blur(10px);
 }
 
 header h1 {
-  margin: 0;
-  color: #00bfff;
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    background: linear-gradient(45deg, #00ffff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 header p {
-  color: #ccc;
-  margin-top: 0.3rem;
+    font-size: 1.1em;
+    color: #b0b0b0;
 }
 
 main {
-  flex: 1;
-  display: flex;
-  gap: 1rem;
-  padding: 1rem;
-  flex-wrap: wrap;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
 }
 
-/* Panel del editor */
-.editor, .output {
-  background: #162b45;
-  border-radius: 12px;
-  padding: 1rem;
-  flex: 1 1 45%;
-  min-width: 340px;
-  box-shadow: 0 0 10px rgba(0, 191, 255, 0.2);
+@media (max-width: 968px) {
+    main {
+        grid-template-columns: 1fr;
+    }
 }
 
-.editor h2, .output h2 {
-  color: #00bfff;
-  margin-top: 0;
-  border-bottom: 1px solid #00bfff55;
-  padding-bottom: 5px;
+section {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 25px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-textarea {
-  width: 100%;
-  height: 300px;
-  background: #0e1a2a;
-  color: #00ffcc;
-  border: 2px solid #00bfff;
-  border-radius: 8px;
-  font-family: monospace;
-  font-size: 15px;
-  padding: 10px;
-  resize: vertical;
-  outline: none;
+section h2 {
+    margin-bottom: 15px;
+    color: #00ffff;
+    font-size: 1.5em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-textarea:focus {
-  border-color: #00ffcc;
-  box-shadow: 0 0 10px #00ffcc44;
+.editor textarea {
+    width: 100%;
+    height: 400px;
+    padding: 15px;
+    background: #1a1a2e;
+    color: #00ff88;
+    border: 2px solid #00ffff;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    resize: vertical;
+    outline: none;
+    transition: all 0.3s;
 }
 
-button {
-  display: inline-block;
-  margin-top: 10px;
-  background: linear-gradient(90deg, #00bfff, #00ffcc);
-  color: #0e1a2a;
-  font-weight: bold;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.3s;
+.editor textarea:focus {
+    border-color: #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
 }
 
-button:hover {
-  background: linear-gradient(90deg, #00ffcc, #00bfff);
-  transform: scale(1.05);
+.editor button {
+    margin-top: 15px;
+    padding: 12px 30px;
+    background: linear-gradient(45deg, #00ffff, #00ff88);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    width: 100%;
 }
 
-/* Panel de salida */
+.editor button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 255, 255, 0.5);
+}
+
+.editor button:active {
+    transform: translateY(0);
+}
+
+.loader {
+    text-align: center;
+    padding: 20px;
+    font-size: 1.2em;
+    color: #00ffff;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .salida {
-  background: #0e1a2a;
-  border-radius: 8px;
-  padding: 1rem;
-  min-height: 200px;
-  overflow-y: auto;
-  border: 2px solid #00bfff55;
+    min-height: 400px;
 }
 
-.texto {
-  color: #00ffcc;
-  font-size: 15px;
-  white-space: pre-wrap;
+.salida pre {
+    background: #0d0d1e;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #00ffff;
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.6;
+}
+
+.imagen {
+    margin-top: 20px;
+    text-align: center;
+    background: linear-gradient(135deg, #0a0e27 0%, #111827 100%);
+    padding: 20px;
+    border-radius: 15px;
+    border: 2px solid #4ade80;
+    box-shadow: 0 8px 32px rgba(74, 222, 128, 0.2);
 }
 
 .imagen img {
-  display: block;
-  margin: 15px auto;
-  max-width: 100%;
-  border-radius: 10px;
-  box-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 3px solid #4ade80;
+    box-shadow: 
+        0 0 20px rgba(74, 222, 128, 0.3),
+        0 0 40px rgba(74, 222, 128, 0.2),
+        0 10px 50px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Loader */
-.loader {
-  font-size: 18px;
-  color: #00bfff;
-  text-align: center;
-  margin: 10px 0;
-  animation: blink 1s infinite alternate;
+.imagen img:hover {
+    transform: scale(1.02);
+    box-shadow: 
+        0 0 30px rgba(74, 222, 128, 0.5),
+        0 0 60px rgba(74, 222, 128, 0.3),
+        0 15px 70px rgba(0, 0, 0, 0.6);
 }
 
-@keyframes blink {
-  from { opacity: 0.5; }
-  to { opacity: 1; }
-}
-
-/* Footer */
 footer {
-  background: #12263f;
-  text-align: center;
-  padding: 0.5rem 0;
-  font-size: 14px;
-  border-top: 2px solid #00bfff33;
-  color: #ccc;
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: #b0b0b0;
+    font-size: 0.9em;
 }
 
 footer strong {
-  color: #00ffcc;
+    color: #00ffff;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0d0d1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(45deg, #00ffff, #00ff88);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #00ffff;
+}
+
+/* Animaciones de entrada */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+section {
+    animation: fadeIn 0.6s ease-out;
+}
+
+header {
+    animation: fadeIn 0.8s ease-out;
 }
