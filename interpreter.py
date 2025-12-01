@@ -3,13 +3,13 @@ import ast
 import math
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Backend sin GUI para servidor
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
 from matplotlib.animation import FuncAnimation, PillowWriter
 
-# Configuración de matplotlib para tema oscuro elegante
+# Configuración de matplotlib
 plt.style.use('dark_background')
 plt.rcParams.update({
     'figure.facecolor': '#0a0e27',
@@ -33,13 +33,11 @@ plt.rcParams.update({
     'savefig.facecolor': '#0a0e27'
 })
 
-# -------------------------
 # Utilidades de evaluación segura
-# -------------------------
 _SAFE_MATH = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
 _SAFE_NUMPY = {
     'sin': np.sin, 'cos': np.cos, 'tan': np.tan,
-    'exp': np.exp, 'log': np.log, 'sqrt': np.sqrt,
+    'exp': np.exp, 'log': np.log, 'ln': np.log, 'sqrt': np.sqrt,
     'abs': np.abs, 'pi': np.pi, 'e': np.e,
     'arctan2': np.arctan2, 'arcsin': np.arcsin,
     'arccos': np.arccos, 'sinh': np.sinh, 'cosh': np.cosh
@@ -48,9 +46,21 @@ _SAFE_NAMES = {}
 _SAFE_NAMES.update(_SAFE_MATH)
 _SAFE_NAMES.update(_SAFE_NUMPY)
 
+def factorial(n):
+    """Calcula factorial"""
+    if n <= 1:
+        return 1
+    result = 1
+    for i in range(2, int(n) + 1):
+        result *= i
+    return result
+
+_SAFE_NAMES['fact'] = factorial
+
 def compile_expr_1d(expr_src):
     """Crea función f(x) que evalúa expr_src de forma segura."""
     try:
+        expr_src = expr_src.replace('^', '**')
         node = ast.parse(expr_src, mode='eval')
         
         for sub in ast.walk(node):
@@ -65,7 +75,7 @@ def compile_expr_1d(expr_src):
         code = compile(node, filename="<expr>", mode="eval")
         
         def f(x):
-            env = {'x': x}
+            env = {'x': x, 'b': x}
             env.update(_SAFE_NAMES)
             return eval(code, {"__builtins__": {}}, env)
         return f
@@ -75,6 +85,7 @@ def compile_expr_1d(expr_src):
 def compile_expr_2d(expr_src):
     """Crea función f(x,y) que evalúa expr_src."""
     try:
+        expr_src = expr_src.replace('^', '**')
         node = ast.parse(expr_src, mode='eval')
         
         for sub in ast.walk(node):
@@ -96,9 +107,6 @@ def compile_expr_2d(expr_src):
     except Exception as e:
         raise ValueError(f"Error compilando expresión 2D: {e}")
 
-# -------------------------
-# Parsing de llamadas
-# -------------------------
 def split_top_level_commas(s):
     """Separa argumentos por comas respetando paréntesis."""
     args = []
@@ -123,27 +131,6 @@ def split_top_level_commas(s):
         args.append(last)
     return args
 
-# Regex corregido con el nombre del grupo correcto
-CALL_RE = re.compile(
-    r'(?P<name>\b(?:draw2d|draw3d|win2d|win3d|text|plane2d|plane3d|display|move|vector2d|vector3d)\b)'
-    r'\s*\((?P<args>.*?)\)\s*;',
-    re.S | re.IGNORECASE
-)
-
-def extract_calls_from_source(source):
-    """Extrae todas las llamadas de función del código fuente."""
-    matches = CALL_RE.finditer(source)
-    calls = []
-    for m in matches:
-        name = m.group('name').lower()  # ✅ CORREGIDO: usar 'name' en lugar de 'n'
-        raw = m.group('args').strip()
-        args = split_top_level_commas(raw)
-        calls.append({'name': name, 'raw': raw, 'args': args})
-    return calls
-
-# -------------------------
-# Funciones de graficado
-# -------------------------
 def png_from_figure(fig, dpi=100):
     """Convierte figura matplotlib a PNG base64."""
     buf = BytesIO()
@@ -163,9 +150,6 @@ def gif_from_animation(anim, fps=20):
     plt.close('all')
     return data64
 
-# -------------------------
-# Interpreter
-# -------------------------
 class Interpreter:
     def __init__(self, source_code):
         self.source = source_code if isinstance(source_code, str) else ""
@@ -174,6 +158,7 @@ class Interpreter:
         self.ultima_imagen = None
         self.tipo_imagen = "png"
         self.actions = []
+        self.output_buffer = []
 
     def ejecutar(self):
         """Ejecuta el código y retorna resultados."""
@@ -182,18 +167,17 @@ class Interpreter:
                 self.salida.append("⚠️ Código vacío")
                 return self.get_result()
 
-            calls = extract_calls_from_source(self.source)
-            
-            if not calls:
-                self.salida.append("⚠️ No se encontraron instrucciones válidas.")
-                self.salida.append("Ejemplo: draw2d(sin(x), -6.28, 6.28);")
-                return self.get_result()
-
-            for call in calls:
-                self.execute_call(call)
+            # Buscar funciones gráficas primero (draw2d, draw3d, text)
+            if self.tiene_funciones_graficas():
+                self.ejecutar_funciones_graficas()
+            else:
+                # Ejecutar código línea por línea
+                self.ejecutar_codigo_secuencial()
 
         except Exception as e:
-            self.salida.append(f"❌ Error en ejecución: {str(e)}")
+            self.salida.append(f"❌ Error: {str(e)}")
+            import traceback
+            self.salida.append(traceback.format_exc())
 
         return self.get_result()
 
@@ -206,173 +190,287 @@ class Interpreter:
             "acciones": self.actions
         }
 
-    def execute_call(self, call):
-        """Ejecuta una llamada de función."""
-        name = call['name']
-        args = call['args']
+    def tiene_funciones_graficas(self):
+        """Detecta si hay funciones gráficas en el código"""
+        return bool(re.search(r'\b(draw2d|draw3d|text|plane2d|plane3d)\s*\(', self.source))
+
+    def ejecutar_funciones_graficas(self):
+        """Ejecuta funciones gráficas (compatibilidad con código original)"""
+        # Patrón para draw2d(expr, xmin, xmax)
+        pattern_2d = re.compile(r'draw2d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', re.IGNORECASE)
+        matches_2d = pattern_2d.findall(self.source)
         
-        try:
-            if name == 'draw2d':
-                self.handle_draw2d(args)
-            elif name == 'draw3d':
-                self.handle_draw3d(args)
-            elif name in ('win2d', 'win3d'):
-                self.salida.append(f"✅ Ventana {name} creada")
-                self.actions.append({'type': 'window', 'name': name})
-            elif name == 'display':
-                self.salida.append("✅ Display ejecutado")
-            elif name == 'text':
-                self.handle_text(args)
-            else:
-                self.salida.append(f"✅ {name} ejecutado")
-        except Exception as e:
-            self.salida.append(f"❌ Error en {name}: {str(e)}")
+        for match in matches_2d:
+            expr, xmin_str, xmax_str = match
+            try:
+                xmin = float(eval(xmin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                xmax = float(eval(xmax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                self.crear_grafico_2d_simple(expr.strip(), xmin, xmax)
+            except Exception as e:
+                self.salida.append(f"❌ Error en draw2d: {e}")
 
-    def handle_draw2d(self, args):
-        """Maneja gráficos 2D."""
-        if len(args) < 3:
-            raise ValueError("draw2d requiere: expresión, xmin, xmax")
-
-        expr = args[0].strip()
+        # Patrón para draw3d(expr, xmin, xmax, ymin, ymax)
+        pattern_3d = re.compile(r'draw3d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', re.IGNORECASE)
+        matches_3d = pattern_3d.findall(self.source)
         
-        # Parsear opciones
-        opts = {}
-        numeric_args = []
-        for arg in args[1:]:
-            if '=' in arg:
-                k, v = arg.split('=', 1)
-                opts[k.strip()] = v.strip().strip('"').strip("'")
-            else:
-                numeric_args.append(arg)
+        for match in matches_3d:
+            expr, xmin_str, xmax_str, ymin_str, ymax_str = match
+            try:
+                xmin = float(eval(xmin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                xmax = float(eval(xmax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                ymin = float(eval(ymin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                ymax = float(eval(ymax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
+                self.crear_grafico_3d_simple(expr.strip(), xmin, xmax, ymin, ymax)
+            except Exception as e:
+                self.salida.append(f"❌ Error en draw3d: {e}")
 
-        if len(numeric_args) < 2:
-            raise ValueError("draw2d requiere xmin y xmax")
-
-        # Evaluar límites
-        try:
-            xmin = float(eval(numeric_args[0], {"__builtins__": {}}, _SAFE_NAMES))
-            xmax = float(eval(numeric_args[1], {"__builtins__": {}}, _SAFE_NAMES))
-            if xmin >= xmax:
-                raise ValueError("xmin debe ser menor que xmax")
-        except Exception as e:
-            raise ValueError(f"Error en límites: {e}")
-
-        # Opciones
-        anim_seconds = float(opts.get('anim', 0))
-        color = opts.get('color', 'deepskyblue')
-
-        # Compilar expresión
-        expr_py = expr.replace('^', '**')
-        f = compile_expr_1d(expr_py)
-
-        # Generar datos
-        x = np.linspace(xmin, xmax, 800)
-        y = f(x)
-
-        # Validar resultados
-        if not isinstance(y, np.ndarray) or y.shape != x.shape:
-            raise ValueError("La expresión debe devolver valores para cada x")
-
-        # Animación o estático
-        if anim_seconds > 0:
-            self.create_2d_animation(x, y, expr, anim_seconds, color)
-        else:
-            self.create_2d_static(x, y, expr, color)
-
-    def create_2d_static(self, x, y, expr, color):
-        """Crea gráfico 2D estático."""
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(x, y, color=color, linewidth=2, label=f'y = {expr}')
-        ax.set_title(f'Gráfico 2D: y = {expr}', fontsize=14, fontweight='bold')
-        ax.set_xlabel('x', fontsize=12)
-        ax.set_ylabel('y', fontsize=12)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        # Patrón para text
+        pattern_text = re.compile(r'text\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE)
+        matches_text = pattern_text.findall(self.source)
         
-        self.ultima_imagen = png_from_figure(fig)
-        self.tipo_imagen = "png"
-        self.salida.append(f"✅ Gráfico 2D: {expr}")
-        self.actions.append({'type': 'draw2d', 'expr': expr})
-
-    def create_2d_animation(self, x, y, expr, seconds, color):
-        """Crea animación 2D."""
-        frames = int(seconds * 20)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        ax.set_xlim(x.min(), x.max())
-        y_min, y_max = np.nanmin(y), np.nanmax(y)
-        margin = (y_max - y_min) * 0.1 if (y_max - y_min) != 0 else 1.0
-        ax.set_ylim(y_min - margin, y_max + margin)
-        ax.set_title(f'Animación: y = {expr}', fontsize=14, fontweight='bold')
-        ax.set_xlabel('x', fontsize=12)
-        ax.set_ylabel('y', fontsize=12)
-        ax.grid(True, alpha=0.3)
-        
-        line, = ax.plot([], [], lw=2, color=color)
-
-        def init():
-            line.set_data([], [])
-            return (line,)
-
-        def update(frame):
-            idx = int(len(x) * (frame + 1) / frames)
-            line.set_data(x[:idx], y[:idx])
-            return (line,)
-
-        anim = FuncAnimation(fig, update, frames=frames, init_func=init, blit=True)
-        
-        self.ultima_imagen = gif_from_animation(anim, fps=20)
-        self.tipo_imagen = "gif"
-        self.salida.append(f"✅ Animación 2D: {expr} ({seconds}s)")
-        self.actions.append({'type': 'draw2d_anim', 'expr': expr})
-
-    def handle_draw3d(self, args):
-        """Maneja gráficos 3D."""
-        if len(args) < 5:
-            raise ValueError("draw3d requiere: expresión, xmin, xmax, ymin, ymax")
-
-        expr = args[0].strip()
-        
-        try:
-            xmin = float(eval(args[1], {"__builtins__": {}}, _SAFE_NAMES))
-            xmax = float(eval(args[2], {"__builtins__": {}}, _SAFE_NAMES))
-            ymin = float(eval(args[3], {"__builtins__": {}}, _SAFE_NAMES))
-            ymax = float(eval(args[4], {"__builtins__": {}}, _SAFE_NAMES))
-        except Exception as e:
-            raise ValueError(f"Error en límites 3D: {e}")
-
-        # Compilar expresión 2D
-        expr_py = expr.replace('^', '**')
-        f2 = compile_expr_2d(expr_py)
-
-        # Crear malla
-        X = np.linspace(xmin, xmax, 100)
-        Y = np.linspace(ymin, ymax, 100)
-        XX, YY = np.meshgrid(X, Y)
-        
-        try:
-            Z = f2(XX, YY)
-        except Exception as e:
-            raise ValueError(f"Error evaluando expresión 3D: {e}")
-
-        # Graficar
-        from mpl_toolkits.mplot3d import Axes3D
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        surf = ax.plot_surface(XX, YY, Z, cmap='viridis', alpha=0.9)
-        ax.set_title(f'Gráfico 3D: z = {expr}', fontsize=14, fontweight='bold')
-        ax.set_xlabel('X', fontsize=11)
-        ax.set_ylabel('Y', fontsize=11)
-        ax.set_zlabel('Z', fontsize=11)
-        fig.colorbar(surf, shrink=0.5, aspect=5)
-        
-        self.ultima_imagen = png_from_figure(fig, dpi=100)
-        self.tipo_imagen = "png"
-        self.salida.append(f"✅ Gráfico 3D: {expr}")
-        self.actions.append({'type': 'draw3d', 'expr': expr})
-
-    def handle_text(self, args):
-        """Maneja texto."""
-        if args:
-            texto = args[0].strip('"').strip("'")
+        for texto in matches_text:
             self.salida.append(f"📝 {texto}")
+
+    def ejecutar_codigo_secuencial(self):
+        """Ejecuta código línea por línea (nuevo sistema)"""
+        lineas = self.source.split(';')
+        
+        i = 0
+        while i < len(lineas):
+            linea = lineas[i].strip()
+            
+            if not linea:
+                i += 1
+                continue
+            
+            # Detectar bucles while
+            if 'while' in linea and '{' in linea:
+                # Buscar el cierre del bucle
+                bloque_completo = linea
+                nivel_llaves = linea.count('{') - linea.count('}')
+                j = i + 1
+                
+                while nivel_llaves > 0 and j < len(lineas):
+                    bloque_completo += ';' + lineas[j]
+                    nivel_llaves += lineas[j].count('{') - lineas[j].count('}')
+                    j += 1
+                
+                self.ejecutar_while(bloque_completo)
+                i = j
+                continue
+            
+            # Ejecutar instrucción individual
+            try:
+                self.ejecutar_instruccion(linea)
+            except Exception as e:
+                self.salida.append(f"❌ Error en línea: {str(e)}")
+            
+            i += 1
+
+    def ejecutar_instruccion(self, linea):
+        """Ejecuta una instrucción individual"""
+        linea = linea.strip()
+        
+        if not linea or linea == '}' or linea == '{':
+            return
+        
+        # Declaración con tipo: int n = 10;
+        if re.match(r'^\s*(int|dec|ecu|string)\s+\w+', linea):
+            self.ejecutar_declaracion(linea)
+            return
+        
+        # Asignación: n = 10;
+        if re.match(r'^\s*\w+\s*=', linea):
+            self.ejecutar_asignacion(linea)
+            return
+        
+        # pri(...)
+        if linea.startswith('pri('):
+            self.ejecutar_pri(linea)
+            return
+        
+        # put(...)
+        if linea.startswith('put('):
+            self.ejecutar_put(linea)
+            return
+        
+        # Incremento/decremento
+        if re.match(r'^\s*\w+\s*\+\+', linea):
+            var = re.match(r'(\w+)\s*\+\+', linea).group(1)
+            if var in self.variables:
+                self.variables[var] += 1
+            return
+        
+        if re.match(r'^\s*\w+\s*--', linea):
+            var = re.match(r'(\w+)\s*--', linea).group(1)
+            if var in self.variables:
+                self.variables[var] -= 1
+            return
+
+    def ejecutar_declaracion(self, linea):
+        """int n = 10; o int n;"""
+        match = re.match(r'(int|dec|ecu|string)\s+(\w+)(?:\s*=\s*(.+))?', linea)
+        if match:
+            tipo, var, valor = match.groups()
+            
+            if valor:
+                # Limpiar expresiones //...//
+                if valor.startswith('//') and valor.endswith('//'):
+                    valor_limpio = valor[2:-2].strip()
+                    self.variables[var] = valor_limpio
+                    self.salida.append(f"✓ {var} = {valor_limpio}")
+                else:
+                    self.variables[var] = self.evaluar_expresion(valor)
+                    self.salida.append(f"✓ {var} = {self.variables[var]}")
+            else:
+                valor_default = 0 if tipo in ['int', 'dec'] else ""
+                self.variables[var] = valor_default
+                self.salida.append(f"✓ Variable {var} declarada")
+
+    def ejecutar_asignacion(self, linea):
+        """n = 10; o n = n + 1;"""
+        match = re.match(r'(\w+)\s*=\s*(.+)', linea)
+        if match:
+            var, expr = match.groups()
+            self.variables[var] = self.evaluar_expresion(expr)
+            self.salida.append(f"✓ {var} = {self.variables[var]}")
+
+    def ejecutar_pri(self, linea):
+        """pri(n); o pri("texto");"""
+        match = re.match(r'pri\s*\(\s*(.+?)\s*\)', linea)
+        if match:
+            contenido = match.group(1).strip()
+            
+            # Cadena
+            if (contenido.startswith('"') and contenido.endswith('"')) or \
+               (contenido.startswith("'") and contenido.endswith("'")):
+                texto = contenido[1:-1]
+                self.salida.append(f"📄 {texto}")
+            # Expresión //...//
+            elif contenido.startswith('//') and contenido.endswith('//'):
+                expr = contenido[2:-2]
+                self.salida.append(f"📄 {expr}")
+            # Variable
+            elif contenido in self.variables:
+                self.salida.append(f"📄 {self.variables[contenido]}")
+            # Expresión
+            else:
+                valor = self.evaluar_expresion(contenido)
+                self.salida.append(f"📄 {valor}")
+
+    def ejecutar_put(self, linea):
+        """put(n); - solicita entrada"""
+        match = re.match(r'put\s*\(\s*(\w+)\s*\)', linea)
+        if match:
+            var = match.group(1)
+            self.variables[var] = 10  # Valor por defecto
+            self.salida.append(f"📥 Entrada: {var} = 10")
+
+    def ejecutar_while(self, bloque):
+        """Ejecuta bucle while"""
+        # Extraer condición y cuerpo
+        match = re.match(r'while\s*\(\s*(.+?)\s*\)\s*\{(.+)\}', bloque, re.DOTALL)
+        if not match:
+            self.salida.append("❌ Error: sintaxis de while incorrecta")
+            return
+        
+        condicion_str, cuerpo = match.groups()
+        
+        # Ejecutar bucle (máximo 1000 iteraciones para seguridad)
+        iteraciones = 0
+        max_iter = 1000
+        
+        while iteraciones < max_iter:
+            # Evaluar condición
+            try:
+                condicion = self.evaluar_expresion(condicion_str)
+                if not condicion:
+                    break
+            except:
+                break
+            
+            # Ejecutar cuerpo
+            instrucciones = cuerpo.split(';')
+            for inst in instrucciones:
+                inst = inst.strip()
+                if inst:
+                    self.ejecutar_instruccion(inst)
+            
+            iteraciones += 1
+        
+        self.salida.append(f"✓ Bucle while ejecutado ({iteraciones} iteraciones)")
+
+    def evaluar_expresion(self, expr):
+        """Evalúa una expresión matemática"""
+        try:
+            expr = str(expr).strip()
+            
+            # Reemplazar variables
+            for var, val in self.variables.items():
+                # Usar word boundary para evitar reemplazos parciales
+                expr = re.sub(r'\b' + re.escape(var) + r'\b', str(val), expr)
+            
+            # Operadores relacionales
+            expr = expr.replace('^', '**')
+            
+            # Evaluar
+            env = dict(_SAFE_NAMES)
+            resultado = eval(expr, {"__builtins__": {}}, env)
+            
+            return resultado
+        except Exception as e:
+            return expr
+
+    def crear_grafico_2d_simple(self, expr, xmin, xmax):
+        """Crea gráfico 2D simple"""
+        try:
+            expr_py = expr.replace('^', '**')
+            f = compile_expr_1d(expr_py)
+            
+            x = np.linspace(xmin, xmax, 800)
+            y = f(x)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(x, y, color='deepskyblue', linewidth=2, label=f'y = {expr}')
+            ax.set_title(f'Gráfico 2D: y = {expr}', fontsize=14, fontweight='bold')
+            ax.set_xlabel('x', fontsize=12)
+            ax.set_ylabel('y', fontsize=12)
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            self.ultima_imagen = png_from_figure(fig)
+            self.tipo_imagen = "png"
+            self.salida.append(f"✓ Gráfico 2D: {expr}")
+            self.actions.append({'type': 'draw2d', 'expr': expr})
+            
+        except Exception as e:
+            self.salida.append(f"❌ Error en gráfico 2D: {str(e)}")
+
+    def crear_grafico_3d_simple(self, expr, xmin, xmax, ymin, ymax):
+        """Crea gráfico 3D simple"""
+        try:
+            expr_py = expr.replace('^', '**')
+            f2 = compile_expr_2d(expr_py)
+            
+            X = np.linspace(xmin, xmax, 100)
+            Y = np.linspace(ymin, ymax, 100)
+            XX, YY = np.meshgrid(X, Y)
+            Z = f2(XX, YY)
+            
+            from mpl_toolkits.mplot3d import Axes3D
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+            surf = ax.plot_surface(XX, YY, Z, cmap='viridis', alpha=0.9)
+            ax.set_title(f'Gráfico 3D: z = {expr}', fontsize=14, fontweight='bold')
+            ax.set_xlabel('X', fontsize=11)
+            ax.set_ylabel('Y', fontsize=11)
+            ax.set_zlabel('Z', fontsize=11)
+            fig.colorbar(surf, shrink=0.5, aspect=5)
+            
+            self.ultima_imagen = png_from_figure(fig, dpi=100)
+            self.tipo_imagen = "png"
+            self.salida.append(f"✓ Gráfico 3D: {expr}")
+            self.actions.append({'type': 'draw3d', 'expr': expr})
+            
+        except Exception as e:
+            self.salida.append(f"❌ Error en gráfico 3D: {str(e)}")

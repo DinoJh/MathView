@@ -34,12 +34,18 @@ class Lexer:
             "text": "FUNCION_TEXTO",
             "now": "FUNCION_NOW",
             "lost": "FUNCION_LOST",
+            "put": "FUNCION_PUT",
+            "pri": "FUNCION_PRI",
+            "eva": "FUNCION_EVA",
+            "rem": "FUNCION_REM",
+            "fact": "FUNCION_FACT",
             # Funciones matemáticas
             "sin": "FUNCION_MATH",
             "cos": "FUNCION_MATH",
             "tan": "FUNCION_MATH",
             "exp": "FUNCION_MATH",
             "log": "FUNCION_MATH",
+            "ln": "FUNCION_MATH",
             "sqrt": "FUNCION_MATH",
             "abs": "FUNCION_MATH",
             "arctan2": "FUNCION_MATH",
@@ -75,7 +81,12 @@ class Lexer:
             '!=': 'DIFERENTE',
             '>=': 'MAYORIGUAL',
             '<=': 'MENORIGUAL',
-            '**': 'POTENCIA'
+            '**': 'POTENCIA',
+            '`': 'BACKTICK',
+            '++': 'INCREMENTO',
+            '--': 'DECREMENTO',
+            '+=': 'MAS_IGUAL',
+            '-=': 'MENOS_IGUAL'
         }
 
     def tokenizar(self, codigo_fuente):
@@ -87,55 +98,61 @@ class Lexer:
         codigo_fuente = re.sub(r'/\*.*?\*/', '', codigo_fuente, flags=re.S)
 
         # Patrón mejorado que captura:
+        # - Expresiones entre //...//
         # - Números negativos: -123, -45.67
-        # - Operadores dobles: ==, !=, <=, >=, **
+        # - Operadores dobles: ==, !=, <=, >=, **, ++, --, +=, -=
         # - Palabras: identificadores y palabras clave
         # - Cadenas entre comillas
-        # - Símbolos individuales
-        patron = r'(-?\d+\.?\d*|==|!=|<=|>=|\*\*|"[^"]*"|\'[^\']*\'|\b\w+\b|[+\-*/%=;:(),{}\[\]<>^])'
+        # - Símbolos individuales incluyendo `
+        patron = r'(//[^/]+//|\'[^\']*\'|"[^"]*"|-?\d+\.?\d*|==|!=|<=|>=|\*\*|\+\+|--|\+=|-=|\b\w+\b|[+\-*/%=;:(),{}\[\]<>^`])'
         
         partes = re.findall(patron, codigo_fuente)
 
         for lexema in partes:
-            lexema = lexema.strip()
-            if not lexema:
+            lexema_stripped = lexema.strip()
+            if not lexema_stripped:
+                continue
+
+            # Expresiones matemáticas entre //...//
+            if lexema_stripped.startswith('//') and lexema_stripped.endswith('//'):
+                tokens.append((lexema_stripped, "EXPRESION_MATH"))
                 continue
 
             # Cadenas entre comillas
-            if (lexema.startswith('"') and lexema.endswith('"')) or \
-               (lexema.startswith("'") and lexema.endswith("'")):
-                tokens.append((lexema, "CADENA"))
+            if (lexema_stripped.startswith('"') and lexema_stripped.endswith('"')) or \
+               (lexema_stripped.startswith("'") and lexema_stripped.endswith("'")):
+                tokens.append((lexema_stripped, "CADENA"))
                 continue
 
             # Palabra clave (case-insensitive para funciones)
-            lexema_lower = lexema.lower()
+            lexema_lower = lexema_stripped.lower()
             if lexema_lower in self.PALABRAS_CLAVE:
-                tokens.append((lexema, self.PALABRAS_CLAVE[lexema_lower]))
+                tokens.append((lexema_stripped, self.PALABRAS_CLAVE[lexema_lower]))
                 continue
 
             # Operadores de dos caracteres
-            if lexema in ['==', '!=', '<=', '>=', '**']:
-                tokens.append((lexema, self.SIMBOLOS[lexema]))
+            if lexema_stripped in ['==', '!=', '<=', '>=', '**', '++', '--', '+=', '-=']:
+                tokens.append((lexema_stripped, self.SIMBOLOS[lexema_stripped]))
                 continue
 
             # Símbolos de un carácter
-            if lexema in self.SIMBOLOS:
-                tokens.append((lexema, self.SIMBOLOS[lexema]))
+            if lexema_stripped in self.SIMBOLOS:
+                tokens.append((lexema_stripped, self.SIMBOLOS[lexema_stripped]))
                 continue
 
             # Números (incluyendo negativos y decimales)
-            if re.match(r'^-?\d+\.?\d*$', lexema):
-                tokens.append((lexema, "NUMERO"))
+            if re.match(r'^-?\d+\.?\d*$', lexema_stripped):
+                tokens.append((lexema_stripped, "NUMERO"))
                 continue
 
             # Identificadores
-            if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', lexema):
-                tokens.append((lexema, "IDENTIFICADOR"))
+            if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', lexema_stripped):
+                tokens.append((lexema_stripped, "IDENTIFICADOR"))
                 continue
 
             # Si no coincide con nada, es desconocido
-            errores.append(f"Token desconocido: '{lexema}'")
-            tokens.append((lexema, "DESCONOCIDO"))
+            errores.append(f"Token desconocido: '{lexema_stripped}'")
+            tokens.append((lexema_stripped, "DESCONOCIDO"))
 
         return {
             "tokens": tokens,
