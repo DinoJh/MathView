@@ -115,7 +115,7 @@ class Parser:
             self.arbol.append("Bucle while")
             return True
 
-        # if
+        # if / else if / else
         if tipo == "CONDICIONAL_IF":
             self.avanzar()
             self.coincidir("PAR_IZQ")
@@ -125,7 +125,33 @@ class Parser:
             while self.actual()[1] not in ["LLAVE_DER", "EOF"]:
                 self.instruccion()
             self.coincidir("LLAVE_DER")
-            self.arbol.append("Condicional if")
+            
+            # Verificar else if / elif
+            while self.actual()[1] in ["CONDICIONAL_ELIF"] or \
+                  (self.actual()[1] == "CONDICIONAL_ELSE" and 
+                   self.pos + 1 < len(self.tokens) and 
+                   self.tokens[self.pos + 1][1] == "CONDICIONAL_IF"):
+                
+                if self.actual()[1] == "CONDICIONAL_ELSE":
+                    self.avanzar()  # else
+                self.avanzar()  # elif o if
+                self.coincidir("PAR_IZQ")
+                self.expresion()
+                self.coincidir("PAR_DER")
+                self.coincidir("LLAVE_IZQ")
+                while self.actual()[1] not in ["LLAVE_DER", "EOF"]:
+                    self.instruccion()
+                self.coincidir("LLAVE_DER")
+            
+            # Verificar else
+            if self.actual()[1] == "CONDICIONAL_ELSE":
+                self.avanzar()
+                self.coincidir("LLAVE_IZQ")
+                while self.actual()[1] not in ["LLAVE_DER", "EOF"]:
+                    self.instruccion()
+                self.coincidir("LLAVE_DER")
+            
+            self.arbol.append("Condicional if/elif/else")
             return True
 
         # Funciones gráficas

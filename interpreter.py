@@ -107,30 +107,6 @@ def compile_expr_2d(expr_src):
     except Exception as e:
         raise ValueError(f"Error compilando expresión 2D: {e}")
 
-def split_top_level_commas(s):
-    """Separa argumentos por comas respetando paréntesis."""
-    args = []
-    depth = 0
-    current = []
-    
-    for ch in s:
-        if ch == ',' and depth == 0:
-            arg = ''.join(current).strip()
-            if arg:
-                args.append(arg)
-            current = []
-            continue
-        current.append(ch)
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-    
-    last = ''.join(current).strip()
-    if last:
-        args.append(last)
-    return args
-
 def png_from_figure(fig, dpi=100):
     """Convierte figura matplotlib a PNG base64."""
     buf = BytesIO()
@@ -140,99 +116,48 @@ def png_from_figure(fig, dpi=100):
     plt.close(fig)
     return data64
 
-def gif_from_animation(anim, fps=20):
-    """Convierte animación a GIF base64."""
-    buf = BytesIO()
-    writer = PillowWriter(fps=fps)
-    anim.save(buf, writer=writer, dpi=80)
-    buf.seek(0)
-    data64 = base64.b64encode(buf.read()).decode('utf-8')
-    plt.close('all')
-    return data64
-
 class Interpreter:
-    def __init__(self, source_code):
+    def __init__(self, source_code, user_inputs=None):
         self.source = source_code if isinstance(source_code, str) else ""
         self.variables = {}
-        self.salida = []
+        self.salida_consola = []
         self.ultima_imagen = None
         self.tipo_imagen = "png"
         self.actions = []
-        self.output_buffer = []
+        self.user_inputs = user_inputs if user_inputs else []
+        self.input_index = 0
+        self.solicitudes_input = []
+        self.errores = []
 
     def ejecutar(self):
         """Ejecuta el código y retorna resultados."""
         try:
             if not self.source or not self.source.strip():
-                self.salida.append("⚠️ Código vacío")
+                self.errores.append("⚠️ Código vacío")
                 return self.get_result()
 
-            # Buscar funciones gráficas primero (draw2d, draw3d, text)
-            if self.tiene_funciones_graficas():
-                self.ejecutar_funciones_graficas()
-            else:
-                # Ejecutar código línea por línea
-                self.ejecutar_codigo_secuencial()
+            # CAMBIO CRÍTICO: Ejecutar código secuencialmente SIEMPRE
+            # Esto permite que las condicionales controlen qué gráficas se dibujan
+            self.ejecutar_codigo_secuencial()
 
         except Exception as e:
-            self.salida.append(f"❌ Error: {str(e)}")
-            import traceback
-            self.salida.append(traceback.format_exc())
+            self.errores.append(f"Error en ejecución: {str(e)}")
 
         return self.get_result()
 
     def get_result(self):
         """Retorna el resultado de la ejecución."""
         return {
-            "texto": "\n".join(self.salida),
+            "texto": "\n".join(self.salida_consola),
+            "errores": self.errores,
             "imagen": self.ultima_imagen,
             "tipo_imagen": self.tipo_imagen,
-            "acciones": self.actions
+            "acciones": self.actions,
+            "solicitudes_input": self.solicitudes_input
         }
 
-    def tiene_funciones_graficas(self):
-        """Detecta si hay funciones gráficas en el código"""
-        return bool(re.search(r'\b(draw2d|draw3d|text|plane2d|plane3d)\s*\(', self.source))
-
-    def ejecutar_funciones_graficas(self):
-        """Ejecuta funciones gráficas (compatibilidad con código original)"""
-        # Patrón para draw2d(expr, xmin, xmax)
-        pattern_2d = re.compile(r'draw2d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', re.IGNORECASE)
-        matches_2d = pattern_2d.findall(self.source)
-        
-        for match in matches_2d:
-            expr, xmin_str, xmax_str = match
-            try:
-                xmin = float(eval(xmin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                xmax = float(eval(xmax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                self.crear_grafico_2d_simple(expr.strip(), xmin, xmax)
-            except Exception as e:
-                self.salida.append(f"❌ Error en draw2d: {e}")
-
-        # Patrón para draw3d(expr, xmin, xmax, ymin, ymax)
-        pattern_3d = re.compile(r'draw3d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', re.IGNORECASE)
-        matches_3d = pattern_3d.findall(self.source)
-        
-        for match in matches_3d:
-            expr, xmin_str, xmax_str, ymin_str, ymax_str = match
-            try:
-                xmin = float(eval(xmin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                xmax = float(eval(xmax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                ymin = float(eval(ymin_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                ymax = float(eval(ymax_str.strip(), {"__builtins__": {}}, _SAFE_NAMES))
-                self.crear_grafico_3d_simple(expr.strip(), xmin, xmax, ymin, ymax)
-            except Exception as e:
-                self.salida.append(f"❌ Error en draw3d: {e}")
-
-        # Patrón para text
-        pattern_text = re.compile(r'text\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE)
-        matches_text = pattern_text.findall(self.source)
-        
-        for texto in matches_text:
-            self.salida.append(f"📝 {texto}")
-
     def ejecutar_codigo_secuencial(self):
-        """Ejecuta código línea por línea (nuevo sistema)"""
+        """Ejecuta código línea por línea"""
         lineas = self.source.split(';')
         
         i = 0
@@ -243,9 +168,12 @@ class Interpreter:
                 i += 1
                 continue
             
-            # Detectar bucles while
+            # Si hay solicitudes de input pendientes, detener ejecución
+            if self.solicitudes_input:
+                break
+            
+            # Detectar bloques while
             if 'while' in linea and '{' in linea:
-                # Buscar el cierre del bucle
                 bloque_completo = linea
                 nivel_llaves = linea.count('{') - linea.count('}')
                 j = i + 1
@@ -259,11 +187,49 @@ class Interpreter:
                 i = j
                 continue
             
-            # Ejecutar instrucción individual
+            # Detectar bloques if
+            if linea.startswith('if') and '(' in linea:
+                bloque_completo = linea
+                nivel_llaves = linea.count('{') - linea.count('}')
+                j = i + 1
+                
+                while nivel_llaves > 0 and j < len(lineas):
+                    bloque_completo += ';' + lineas[j]
+                    nivel_llaves += lineas[j].count('{') - lineas[j].count('}')
+                    j += 1
+                
+                # Buscar else if o else
+                while j < len(lineas):
+                    siguiente = lineas[j].strip()
+                    if siguiente.startswith('elif') or siguiente.startswith('else'):
+                        bloque_completo += ';' + siguiente
+                        if '{' in siguiente:
+                            nivel_llaves = siguiente.count('{') - siguiente.count('}')
+                            j += 1
+                            while nivel_llaves > 0 and j < len(lineas):
+                                bloque_completo += ';' + lineas[j]
+                                nivel_llaves += lineas[j].count('{') - lineas[j].count('}')
+                                j += 1
+                        else:
+                            j += 1
+                    else:
+                        break
+                
+                self.ejecutar_if(bloque_completo)
+                i = j
+                continue
+            
+            # Instrucción individual
             try:
                 self.ejecutar_instruccion(linea)
+                # Si se solicitó input, detener
+                if self.solicitudes_input:
+                    break
+            except StopIteration:
+                # Se necesita input, detener ejecución
+                break
             except Exception as e:
-                self.salida.append(f"❌ Error en línea: {str(e)}")
+                self.errores.append(f"Error: {str(e)}")
             
             i += 1
 
@@ -274,12 +240,26 @@ class Interpreter:
         if not linea or linea == '}' or linea == '{':
             return
         
-        # Declaración con tipo: int n = 10;
+        # Si ya tenemos solicitudes de input pendientes, no seguir ejecutando
+        if self.solicitudes_input:
+            return
+        
+        # draw2d(...)
+        if linea.startswith('draw2d('):
+            self.ejecutar_draw2d(linea)
+            return
+        
+        # draw3d(...)
+        if linea.startswith('draw3d('):
+            self.ejecutar_draw3d(linea)
+            return
+        
+        # Declaración con tipo
         if re.match(r'^\s*(int|dec|ecu|string)\s+\w+', linea):
             self.ejecutar_declaracion(linea)
             return
         
-        # Asignación: n = 10;
+        # Asignación
         if re.match(r'^\s*\w+\s*=', linea):
             self.ejecutar_asignacion(linea)
             return
@@ -289,7 +269,7 @@ class Interpreter:
             self.ejecutar_pri(linea)
             return
         
-        # put(...)
+        # put(...) - Solicitar entrada
         if linea.startswith('put('):
             self.ejecutar_put(linea)
             return
@@ -307,6 +287,32 @@ class Interpreter:
                 self.variables[var] -= 1
             return
 
+    def ejecutar_draw2d(self, linea):
+        """Ejecuta draw2d directamente"""
+        match = re.match(r'draw2d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', linea)
+        if match:
+            expr, xmin_str, xmax_str = match.groups()
+            try:
+                xmin = float(self.evaluar_expresion(xmin_str.strip()))
+                xmax = float(self.evaluar_expresion(xmax_str.strip()))
+                self.crear_grafico_2d(expr.strip(), xmin, xmax)
+            except Exception as e:
+                self.errores.append(f"Error en draw2d: {e}")
+
+    def ejecutar_draw3d(self, linea):
+        """Ejecuta draw3d directamente"""
+        match = re.match(r'draw3d\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)', linea)
+        if match:
+            expr, xmin_str, xmax_str, ymin_str, ymax_str = match.groups()
+            try:
+                xmin = float(self.evaluar_expresion(xmin_str.strip()))
+                xmax = float(self.evaluar_expresion(xmax_str.strip()))
+                ymin = float(self.evaluar_expresion(ymin_str.strip()))
+                ymax = float(self.evaluar_expresion(ymax_str.strip()))
+                self.crear_grafico_3d(expr.strip(), xmin, xmax, ymin, ymax)
+            except Exception as e:
+                self.errores.append(f"Error en draw3d: {e}")
+
     def ejecutar_declaracion(self, linea):
         """int n = 10; o int n;"""
         match = re.match(r'(int|dec|ecu|string)\s+(\w+)(?:\s*=\s*(.+))?', linea)
@@ -314,18 +320,14 @@ class Interpreter:
             tipo, var, valor = match.groups()
             
             if valor:
-                # Limpiar expresiones //...//
                 if valor.startswith('//') and valor.endswith('//'):
                     valor_limpio = valor[2:-2].strip()
                     self.variables[var] = valor_limpio
-                    self.salida.append(f"✓ {var} = {valor_limpio}")
                 else:
                     self.variables[var] = self.evaluar_expresion(valor)
-                    self.salida.append(f"✓ {var} = {self.variables[var]}")
             else:
                 valor_default = 0 if tipo in ['int', 'dec'] else ""
                 self.variables[var] = valor_default
-                self.salida.append(f"✓ Variable {var} declarada")
 
     def ejecutar_asignacion(self, linea):
         """n = 10; o n = n + 1;"""
@@ -333,7 +335,6 @@ class Interpreter:
         if match:
             var, expr = match.groups()
             self.variables[var] = self.evaluar_expresion(expr)
-            self.salida.append(f"✓ {var} = {self.variables[var]}")
 
     def ejecutar_pri(self, linea):
         """pri(n); o pri("texto");"""
@@ -345,43 +346,64 @@ class Interpreter:
             if (contenido.startswith('"') and contenido.endswith('"')) or \
                (contenido.startswith("'") and contenido.endswith("'")):
                 texto = contenido[1:-1]
-                self.salida.append(f"📄 {texto}")
+                self.salida_consola.append(texto)
             # Expresión //...//
             elif contenido.startswith('//') and contenido.endswith('//'):
                 expr = contenido[2:-2]
-                self.salida.append(f"📄 {expr}")
+                self.salida_consola.append(expr)
             # Variable
             elif contenido in self.variables:
-                self.salida.append(f"📄 {self.variables[contenido]}")
+                self.salida_consola.append(str(self.variables[contenido]))
             # Expresión
             else:
                 valor = self.evaluar_expresion(contenido)
-                self.salida.append(f"📄 {valor}")
+                self.salida_consola.append(str(valor))
 
     def ejecutar_put(self, linea):
-        """put(n); - solicita entrada"""
+        """put(n); - solicita entrada del usuario"""
         match = re.match(r'put\s*\(\s*(\w+)\s*\)', linea)
         if match:
             var = match.group(1)
-            self.variables[var] = 10  # Valor por defecto
-            self.salida.append(f"📥 Entrada: {var} = 10")
+            
+            # Si hay inputs proporcionados, usar el siguiente
+            if self.input_index < len(self.user_inputs):
+                valor_str = self.user_inputs[self.input_index]
+                self.input_index += 1
+                
+                # Intentar convertir a número
+                try:
+                    if '.' in valor_str:
+                        valor = float(valor_str)
+                    else:
+                        valor = int(valor_str)
+                except:
+                    valor = valor_str
+                
+                self.variables[var] = valor
+                # No agregar a salida aquí, ya se muestra en el frontend
+            else:
+                # Solicitar input al usuario SOLO si no lo hemos pedido ya
+                if not self.solicitudes_input or self.solicitudes_input[-1]['variable'] != var:
+                    self.solicitudes_input.append({
+                        'variable': var,
+                        'mensaje': f'Ingrese valor para {var}:'
+                    })
+                # Detener ejecución hasta recibir input
+                raise StopIteration("Esperando input del usuario")
 
     def ejecutar_while(self, bloque):
         """Ejecuta bucle while"""
-        # Extraer condición y cuerpo
         match = re.match(r'while\s*\(\s*(.+?)\s*\)\s*\{(.+)\}', bloque, re.DOTALL)
         if not match:
-            self.salida.append("❌ Error: sintaxis de while incorrecta")
+            self.errores.append("Error: sintaxis de while incorrecta")
             return
         
         condicion_str, cuerpo = match.groups()
         
-        # Ejecutar bucle (máximo 1000 iteraciones para seguridad)
         iteraciones = 0
         max_iter = 1000
         
         while iteraciones < max_iter:
-            # Evaluar condición
             try:
                 condicion = self.evaluar_expresion(condicion_str)
                 if not condicion:
@@ -389,7 +411,6 @@ class Interpreter:
             except:
                 break
             
-            # Ejecutar cuerpo
             instrucciones = cuerpo.split(';')
             for inst in instrucciones:
                 inst = inst.strip()
@@ -397,8 +418,57 @@ class Interpreter:
                     self.ejecutar_instruccion(inst)
             
             iteraciones += 1
+
+    def ejecutar_if(self, bloque):
+        """Ejecuta condicional if/elif/else"""
+        # Extraer if principal
+        match_if = re.match(r'if\s*\(\s*(.+?)\s*\)\s*\{(.+?)(?=\}\s*(?:elif|else)|$)', bloque, re.DOTALL)
+        if not match_if:
+            self.errores.append("Error: sintaxis de if incorrecta")
+            return
         
-        self.salida.append(f"✓ Bucle while ejecutado ({iteraciones} iteraciones)")
+        condicion_if, cuerpo_if = match_if.groups()
+        
+        # Evaluar if
+        try:
+            if self.evaluar_expresion(condicion_if):
+                # Ejecutar bloque if
+                instrucciones = cuerpo_if.split(';')
+                for inst in instrucciones:
+                    inst = inst.strip()
+                    if inst and inst != '}':
+                        self.ejecutar_instruccion(inst)
+                return  # Si el if se ejecutó, no evaluar elif/else
+        except Exception as e:
+            self.errores.append(f"Error en if: {e}")
+            return
+        
+        # Buscar elif
+        resto = bloque[match_if.end():]
+        matches_elif = list(re.finditer(r'(?:elif)\s*\(\s*(.+?)\s*\)\s*\{(.+?)\}', resto, re.DOTALL))
+        
+        for match_elif in matches_elif:
+            condicion_elif, cuerpo_elif = match_elif.groups()
+            try:
+                if self.evaluar_expresion(condicion_elif):
+                    instrucciones = cuerpo_elif.split(';')
+                    for inst in instrucciones:
+                        inst = inst.strip()
+                        if inst and inst != '}':
+                            self.ejecutar_instruccion(inst)
+                    return  # Si un elif se ejecutó, terminar
+            except:
+                continue
+        
+        # Buscar else
+        match_else = re.search(r'else\s*\{(.+?)\}', resto, re.DOTALL)
+        if match_else:
+            cuerpo_else = match_else.group(1)
+            instrucciones = cuerpo_else.split(';')
+            for inst in instrucciones:
+                inst = inst.strip()
+                if inst and inst != '}':
+                    self.ejecutar_instruccion(inst)
 
     def evaluar_expresion(self, expr):
         """Evalúa una expresión matemática"""
@@ -407,13 +477,10 @@ class Interpreter:
             
             # Reemplazar variables
             for var, val in self.variables.items():
-                # Usar word boundary para evitar reemplazos parciales
                 expr = re.sub(r'\b' + re.escape(var) + r'\b', str(val), expr)
             
-            # Operadores relacionales
             expr = expr.replace('^', '**')
             
-            # Evaluar
             env = dict(_SAFE_NAMES)
             resultado = eval(expr, {"__builtins__": {}}, env)
             
@@ -421,8 +488,8 @@ class Interpreter:
         except Exception as e:
             return expr
 
-    def crear_grafico_2d_simple(self, expr, xmin, xmax):
-        """Crea gráfico 2D simple"""
+    def crear_grafico_2d(self, expr, xmin, xmax):
+        """Crea gráfico 2D"""
         try:
             expr_py = expr.replace('^', '**')
             f = compile_expr_1d(expr_py)
@@ -430,7 +497,7 @@ class Interpreter:
             x = np.linspace(xmin, xmax, 800)
             y = f(x)
             
-            fig, ax = plt.subplots(figsize=(10, 6))
+            fig, ax = plt.subplots(figsize=(8, 5))
             ax.plot(x, y, color='deepskyblue', linewidth=2, label=f'y = {expr}')
             ax.set_title(f'Gráfico 2D: y = {expr}', fontsize=14, fontweight='bold')
             ax.set_xlabel('x', fontsize=12)
@@ -440,14 +507,13 @@ class Interpreter:
             
             self.ultima_imagen = png_from_figure(fig)
             self.tipo_imagen = "png"
-            self.salida.append(f"✓ Gráfico 2D: {expr}")
-            self.actions.append({'type': 'draw2d', 'expr': expr})
+            self.salida_consola.append(f"✓ Gráfico 2D generado")
             
         except Exception as e:
-            self.salida.append(f"❌ Error en gráfico 2D: {str(e)}")
+            self.errores.append(f"Error en gráfico 2D: {str(e)}")
 
-    def crear_grafico_3d_simple(self, expr, xmin, xmax, ymin, ymax):
-        """Crea gráfico 3D simple"""
+    def crear_grafico_3d(self, expr, xmin, xmax, ymin, ymax):
+        """Crea gráfico 3D"""
         try:
             expr_py = expr.replace('^', '**')
             f2 = compile_expr_2d(expr_py)
@@ -458,7 +524,7 @@ class Interpreter:
             Z = f2(XX, YY)
             
             from mpl_toolkits.mplot3d import Axes3D
-            fig = plt.figure(figsize=(10, 8))
+            fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(111, projection='3d')
             surf = ax.plot_surface(XX, YY, Z, cmap='viridis', alpha=0.9)
             ax.set_title(f'Gráfico 3D: z = {expr}', fontsize=14, fontweight='bold')
@@ -469,8 +535,7 @@ class Interpreter:
             
             self.ultima_imagen = png_from_figure(fig, dpi=100)
             self.tipo_imagen = "png"
-            self.salida.append(f"✓ Gráfico 3D: {expr}")
-            self.actions.append({'type': 'draw3d', 'expr': expr})
+            self.salida_consola.append(f"✓ Gráfico 3D generado")
             
         except Exception as e:
-            self.salida.append(f"❌ Error en gráfico 3D: {str(e)}")
+            self.errores.append(f"Error en gráfico 3D: {str(e)}")

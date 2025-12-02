@@ -1,152 +1,265 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('formCompilador');
-    const codigoTextarea = document.getElementById('codigo');
-    const loader = document.getElementById('loader');
-    const salidaTexto = document.getElementById('salidaTexto');
-    const salidaImagen = document.getElementById('salidaImagen');
+// Variables globales
+let userInputs = [];
+let esperandoInput = false;
+let codigoActual = '';
 
-    // Ejemplo por defecto
-    const ejemploPorDefecto = `// Ejemplo de gráficos 2D y 3D 
+// Elementos del DOM
+const codigoTextarea = document.getElementById('codigo');
+const btnCompilar = document.getElementById('btn-compilar');
+const btnLimpiar = document.getElementById('btn-limpiar');
+const consola = document.getElementById('consola');
+const consolaInput = document.getElementById('consola-input');
+const inputPrompt = document.getElementById('input-prompt');
+const inputValor = document.getElementById('input-valor');
+const estadoBar = document.getElementById('estado-bar');
+const estadoIcono = document.getElementById('estado-icono');
+const estadoTexto = document.getElementById('estado-texto');
+const visualizacion = document.getElementById('visualizacion');
+const grafico = document.getElementById('grafico');
+const tokensOutput = document.getElementById('tokens-output');
 
-// Ejemplo por defecto:
-draw3d(x*x + y*y, 0, 15, 0, 15);`;
+// Event Listeners
+btnCompilar.addEventListener('click', () => compilar(true));
+btnLimpiar.addEventListener('click', limpiar);
 
-    if (codigoTextarea.value.trim() === '') {
-        codigoTextarea.value = ejemploPorDefecto;
+// Enter en el input de consola
+inputValor.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        enviarInput();
     }
+});
 
-    form.addEventListener('submit', async function(e) {
+// Atajo de teclado Ctrl+Enter para compilar
+codigoTextarea.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
+        compilar(true);
+    }
+});
 
-        const codigo = codigoTextarea.value;
-
-        if (!codigo.trim()) {
-            mostrarError('Por favor escribe código antes de ejecutar');
-            return;
-        }
-
-        // Limpiar salida anterior
-        salidaTexto.textContent = '';
-        salidaImagen.innerHTML = '';
-        loader.style.display = 'block';
-
-        try {
-            const response = await fetch('/compilar', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ codigo: codigo })
-            });
-
-            const data = await response.json();
-
-            loader.style.display = 'none';
-
-            if (data.estado === 'correcto') {
-                mostrarResultadoCorrecto(data);
-            } else if (data.estado === 'error_lexico') {
-                mostrarErrorLexico(data);
-            } else if (data.estado === 'error_sintactico') {
-                mostrarErrorSintactico(data);
-            } else {
-                mostrarError(data.mensaje || 'Error desconocido', data.errores);
-            }
-
-        } catch (error) {
-            loader.style.display = 'none';
-            mostrarError('Error de conexión: ' + error.message);
-        }
+function compilar(esNuevaCompilacion = false) {
+    const codigo = codigoTextarea.value.trim();
+    
+    if (!codigo) {
+        mostrarEstado('error', 'Por favor, escribe código antes de compilar');
+        return;
+    }
+    
+    // Si es una nueva compilación, resetear inputs
+    if (esNuevaCompilacion) {
+        userInputs = [];
+        codigoActual = codigo;
+        limpiarConsola();
+    }
+    
+    // Mostrar estado de compilación
+    mostrarEstado('advertencia', '⏳ Compilando...');
+    btnCompilar.disabled = true;
+    
+    // Enviar petición
+    fetch('/compilar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            codigo: codigoActual,
+            inputs: userInputs
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        procesarRespuesta(data);
+        btnCompilar.disabled = false;
+    })
+    .catch(error => {
+        mostrarEstado('error', `❌ Error de conexión: ${error.message}`);
+        agregarLineaConsola(`Error: ${error.message}`, 'error');
+        btnCompilar.disabled = false;
+        esperandoInput = false;
     });
+}
 
-    function mostrarResultadoCorrecto(data) {
-        let textoSalida = '✅ EJECUCIÓN EXITOSA\n\n';
-        textoSalida += data.texto || 'Sin salida de texto';
-        
-        if (data.acciones && data.acciones.length > 0) {
-            textoSalida += '\n\n📋 Acciones realizadas:\n';
-            data.acciones.forEach((accion, i) => {
-                textoSalida += `  ${i + 1}. ${accion.type}`;
-                if (accion.expr) textoSalida += `: ${accion.expr}`;
-                textoSalida += '\n';
-            });
-        }
-
-        salidaTexto.textContent = textoSalida;
-        salidaTexto.style.color = '#00ff88';
-
-        // Mostrar imagen si existe
-        if (data.imagen) {
-            const tipoImagen = data.tipo_imagen || 'png';
-            const mimeType = tipoImagen === 'gif' ? 'image/gif' : 'image/png';
-            const img = document.createElement('img');
-            img.src = `data:${mimeType};base64,${data.imagen}`;
-            img.alt = 'Gráfico generado';
-            img.style.maxWidth = '100%';
-            img.style.borderRadius = '8px';
-            img.style.marginTop = '10px';
-            salidaImagen.appendChild(img);
-        }
+function procesarRespuesta(data) {
+    // Mostrar tokens solo en primera compilación
+    if (data.tokens && userInputs.length === 0) {
+        mostrarTokens(data.tokens);
     }
-
-    function mostrarErrorLexico(data) {
-        let textoError = '❌ ERRORES LÉXICOS\n\n';
-        if (data.errores && data.errores.length > 0) {
-            data.errores.forEach(error => {
-                textoError += `• ${error}\n`;
-            });
-        }
-        textoError += '\n📝 Tokens reconocidos:\n';
-        if (data.tokens && data.tokens.length > 0) {
-            data.tokens.slice(0, 20).forEach(token => {
-                textoError += `  ${token[0]} → ${token[1]}\n`;
-            });
-            if (data.tokens.length > 20) {
-                textoError += `  ... y ${data.tokens.length - 20} más\n`;
+    
+    // Manejar diferentes estados
+    switch(data.estado) {
+        case 'correcto':
+            mostrarEstado('correcto', '✅ Compilación exitosa');
+            mostrarSalida(data);
+            esperandoInput = false;
+            break;
+            
+        case 'con_errores':
+            mostrarEstado('advertencia', '⚠️ Compilación con errores');
+            mostrarSalida(data);
+            esperandoInput = false;
+            break;
+            
+        case 'necesita_input':
+            if (!esperandoInput) {
+                esperandoInput = true;
+                solicitarInput(data.solicitudes[0]);
             }
-        }
-        salidaTexto.textContent = textoError;
-        salidaTexto.style.color = '#ff4444';
+            break;
+            
+        case 'error_lexico':
+            mostrarEstado('error', '❌ Errores léxicos');
+            mostrarErrores(data.errores);
+            esperandoInput = false;
+            break;
+            
+        case 'error_sintactico':
+            mostrarEstado('error', '❌ Errores sintácticos');
+            mostrarErrores(data.errores);
+            esperandoInput = false;
+            break;
+            
+        case 'error':
+            mostrarEstado('error', `❌ ${data.mensaje}`);
+            agregarLineaConsola(data.mensaje, 'error');
+            if (data.traceback) {
+                console.error(data.traceback);
+            }
+            esperandoInput = false;
+            break;
     }
+}
 
-    function mostrarErrorSintactico(data) {
-        let textoError = '❌ ERRORES SINTÁCTICOS\n\n';
-        if (data.errores && data.errores.length > 0) {
-            data.errores.forEach(error => {
-                textoError += `• ${error}\n`;
-            });
-        }
-        salidaTexto.textContent = textoError;
-        salidaTexto.style.color = '#ff8844';
+function mostrarSalida(data) {
+    // Mostrar salida del programa
+    if (data.salida) {
+        const lineas = data.salida.split('\n');
+        lineas.forEach(linea => {
+            if (linea.trim()) {
+                agregarLineaConsola(linea, 'output');
+            }
+        });
     }
-
-    function mostrarError(mensaje, errores) {
-        let textoError = `❌ ERROR\n\n${mensaje}\n`;
-        if (errores && Array.isArray(errores)) {
-            textoError += '\nDetalles:\n';
-            errores.forEach(e => {
-                textoError += `• ${e}\n`;
-            });
-        }
-        salidaTexto.textContent = textoError;
-        salidaTexto.style.color = '#ff4444';
+    
+    // Mostrar errores si hay
+    if (data.errores && data.errores.length > 0) {
+        data.errores.forEach(error => {
+            agregarLineaConsola(error, 'error');
+        });
     }
+    
+    // Mostrar imagen si hay
+    if (data.imagen) {
+        visualizacion.classList.remove('oculto');
+        grafico.src = `data:image/png;base64,${data.imagen}`;
+    } else {
+        visualizacion.classList.add('oculto');
+    }
+}
 
-    // Atajos de teclado
-    codigoTextarea.addEventListener('keydown', function(e) {
-        // Tab para insertar espacios
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const start = this.selectionStart;
-            const end = this.selectionEnd;
-            this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
-            this.selectionStart = this.selectionEnd = start + 4;
-        }
-        
-        // Ctrl+Enter para ejecutar
-        if (e.ctrlKey && e.key === 'Enter') {
-            e.preventDefault();
-            form.dispatchEvent(new Event('submit'));
-        }
+function mostrarErrores(errores) {
+    errores.forEach(error => {
+        agregarLineaConsola(error, 'error');
     });
+}
+
+function solicitarInput(solicitud) {
+    inputPrompt.textContent = solicitud.mensaje;
+    inputValor.value = '';
+    consolaInput.classList.remove('oculto');
+    inputValor.focus();
+}
+
+function enviarInput() {
+    const valor = inputValor.value.trim();
+    
+    if (!valor) {
+        return;
+    }
+    
+    // Mostrar lo que se ingresó
+    agregarLineaConsola(`${inputPrompt.textContent} ${valor}`, 'input');
+    
+    // Guardar el input
+    userInputs.push(valor);
+    
+    // Ocultar el input
+    consolaInput.classList.add('oculto');
+    inputValor.value = '';
+    
+    // Recompilar con el nuevo input (NO es nueva compilación)
+    setTimeout(() => {
+        esperandoInput = false;
+        compilar(false);
+    }, 100);
+}
+
+function agregarLineaConsola(texto, tipo = 'output') {
+    // Limpiar placeholder si existe
+    const placeholder = consola.querySelector('.consola-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+    
+    const linea = document.createElement('div');
+    linea.className = `consola-line ${tipo}`;
+    linea.textContent = texto;
+    consola.appendChild(linea);
+    consola.scrollTop = consola.scrollHeight;
+}
+
+function limpiarConsola() {
+    consola.innerHTML = '';
+    consolaInput.classList.add('oculto');
+}
+
+function mostrarEstado(tipo, mensaje) {
+    estadoBar.className = `estado-bar ${tipo}`;
+    
+    const iconos = {
+        'correcto': '✅',
+        'error': '❌',
+        'advertencia': '⚠️'
+    };
+    
+    estadoIcono.textContent = iconos[tipo] || '📋';
+    estadoTexto.textContent = mensaje;
+    estadoBar.classList.remove('oculto');
+}
+
+function mostrarTokens(tokens) {
+    tokensOutput.innerHTML = '';
+    
+    // Limpiar placeholder si existe
+    const placeholder = tokensOutput.querySelector('.tokens-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+    
+    tokens.forEach(([lexema, tipo]) => {
+        const tokenItem = document.createElement('div');
+        tokenItem.className = 'token-item';
+        tokenItem.innerHTML = `<strong>${tipo}</strong>: ${lexema}`;
+        tokensOutput.appendChild(tokenItem);
+    });
+}
+
+function limpiar() {
+    codigoTextarea.value = '';
+    limpiarConsola();
+    estadoBar.classList.add('oculto');
+    visualizacion.classList.add('oculto');
+    tokensOutput.innerHTML = '<div class="tokens-placeholder">Los tokens aparecerán aquí después de compilar...</div>';
+    userInputs = [];
+    codigoActual = '';
+    esperandoInput = false;
+}
+
+// Código inicial de ejemplo
+window.addEventListener('DOMContentLoaded', () => {
+    if (!codigoTextarea.value) {
+        codigoTextarea.value = `int n = 10;
+pri("Hola Mundo");
+pri(n);`;
+    }
 });

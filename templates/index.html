@@ -3,61 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compilador Gráfico 2D/3D</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Compilador Matemático</title>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <header>
-        <h1>🧠 MathView - Compilador Gráfico 2D/3D</h1>
-        <p>Proyecto de Compiladores – Visualiza funciones matemáticas de forma interactiva</p>
-    </header>
+    <div class="container">
+        <header>
+            <h1>🧮 Compilador Matemático</h1>
+            <p>Escribe tu código y compílalo</p>
+        </header>
 
-    <main>
-        <section class="editor">
-            <h2>💻 Editor de Código</h2>
-            <form id="formCompilador">
-                <textarea 
-                    id="codigo" 
-                    spellcheck="false" 
-                    placeholder="Escribe tu código aquí...
+        <!-- Barra de estado -->
+        <div id="estado-bar" class="estado-bar oculto">
+            <span id="estado-icono"></span>
+            <span id="estado-texto"></span>
+        </div>
 
-// Ejemplo de grafica 2D:
-// draw2d(x+2, -5, 5);
-// Ejemplo de grafica 3D:
-// draw3d(x*x + y*y, 0, 15, 0, 15);
-// draw3d(x+y, -5, 10, -5, 10);
-
-Usa Ctrl+Enter para ejecutar"
-                ></textarea>
-                <button type="submit">▶ Ejecutar Código</button>
-            </form>
-            
-            <div style="margin-top: 15px; padding: 10px; background: rgba(0,255,255,0.1); border-radius: 8px; font-size: 0.9em;">
-                <strong>💡 Sintaxis soportada:</strong><br>
-                • <code>draw2d(expr, xmin, xmax)</code> - Gráfico 2D<br>
-                • <code>draw2d(expr, xmin, xmax, anim=2)</code> - Animación<br>
-                • <code>draw3d(expr, xmin, xmax, ymin, ymax)</code> - Gráfico 3D<br>
-                • <code>win2d nombre;</code> - Declarar ventana 2D<br>
-                • Funciones: (Aún en Proceso) 
+        <div class="editor-container">
+            <!-- Editor de código -->
+            <div class="editor-section">
+                <h3>📝 Editor de Código</h3>
+                <textarea id="codigo" placeholder="Escribe tu código aquí...
+Ejemplo:
+int n = 10;
+pri('Hola Mundo');
+pri(n);"></textarea>
+                
+                <div class="botones">
+                    <button id="btn-compilar" class="btn-primary">▶️ Compilar</button>
+                    <button id="btn-limpiar" class="btn-secondary">🗑️ Limpiar</button>
+                </div>
             </div>
-        </section>
 
-        <section class="output">
-            <h2>📤 Resultado de Ejecución</h2>
-            <div id="loader" class="loader" style="display:none;">⏳ Procesando código...</div>
-
-            <div class="salida">
-                <pre id="salidaTexto" class="texto">Ejecuta tu código para ver los resultados...</pre>
-                <div id="salidaImagen" class="imagen"></div>
+            <!-- Consola de salida -->
+            <div class="output-section">
+                <h3>💻 Consola de Salida</h3>
+                <div id="consola" class="consola">
+                    <div class="consola-placeholder">La salida aparecerá aquí...</div>
+                </div>
+                <!-- Input en consola -->
+                <div id="consola-input" class="consola-input oculto">
+                    <span id="input-prompt"></span>
+                    <input type="text" id="input-valor" placeholder="Ingrese valor...">
+                </div>
             </div>
-        </section>
-    </main>
+        </div>
 
-    <footer>
-        <p>Desarrollado por <strong>Dino Sensei xD</strong> – Proyecto educativo de compiladores en Python 🐍</p>
-        <p style="margin-top: 5px; font-size: 0.85em;">Tecnologías: Flask + Python + Matplotlib + NumPy</p>
-    </footer>
+        <!-- Visualización y Tokens en horizontal -->
+        <div class="bottom-container">
+            <!-- Sección de visualización -->
+            <div id="visualizacion" class="visualizacion oculto">
+                <h3>📊 Visualización</h3>
+                <img id="grafico" alt="Gráfico generado">
+            </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+            <!-- Tokens -->
+            <div class="tokens-section">
+                <h3>🔍 Tokens Generados</h3>
+                <div id="tokens-output" class="tokens-output">
+                    <div class="tokens-placeholder">Los tokens aparecerán aquí después de compilar...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
 </body>
 </html>

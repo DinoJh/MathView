@@ -13,7 +13,9 @@ def index():
 @app.route("/compilar", methods=["POST"])
 def compilar():
     try:
-        codigo = request.json.get("codigo", "") if request.is_json else request.form.get("codigo", "")
+        data = request.get_json()
+        codigo = data.get("codigo", "")
+        user_inputs = data.get("inputs", [])  # Inputs del usuario
 
         if not isinstance(codigo, str) or not codigo.strip():
             return jsonify({
@@ -30,6 +32,7 @@ def compilar():
         if errores_lexico:
             return jsonify({
                 "estado": "error_lexico",
+                "mensaje": "Errores léxicos encontrados",
                 "errores": errores_lexico,
                 "tokens": [(t[0], t[1]) for t in tokens]
             })
@@ -41,18 +44,30 @@ def compilar():
         if resultado_sintactico["errores"]:
             return jsonify({
                 "estado": "error_sintactico",
+                "mensaje": "Errores sintácticos encontrados",
                 "errores": resultado_sintactico["errores"],
                 "tokens": [(t[0], t[1]) for t in tokens]
             })
 
         # 3. INTERPRETACIÓN
-        interpreter = Interpreter(codigo)
+        interpreter = Interpreter(codigo, user_inputs)
         resultado_interprete = interpreter.ejecutar()
 
+        # Si hay solicitudes de input, devolver para que el frontend las maneje
+        if resultado_interprete.get("solicitudes_input"):
+            return jsonify({
+                "estado": "necesita_input",
+                "mensaje": "El programa requiere entrada del usuario",
+                "solicitudes": resultado_interprete["solicitudes_input"]
+            })
+
+        # Compilación exitosa
         return jsonify({
-            "estado": "correcto",
+            "estado": "correcto" if not resultado_interprete.get("errores") else "con_errores",
             "tokens": [(t[0], t[1]) for t in tokens],
-            "texto": resultado_interprete.get("texto", ""),
+            "salida": resultado_interprete.get("texto", ""),
+            "debug": resultado_interprete.get("debug", ""),
+            "errores": resultado_interprete.get("errores", []),
             "imagen": resultado_interprete.get("imagen", None),
             "acciones": resultado_interprete.get("acciones", [])
         })
