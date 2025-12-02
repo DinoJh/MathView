@@ -384,9 +384,16 @@ class Interpreter:
             else:
                 # Solicitar input al usuario SOLO si no lo hemos pedido ya
                 if not self.solicitudes_input or self.solicitudes_input[-1]['variable'] != var:
+                    # Obtener el último mensaje de pri() como prompt
+                    prompt = f'{var}: '
+                    if self.salida_consola:
+                        # Usar el último mensaje como prompt
+                        prompt = self.salida_consola[-1] if self.salida_consola[-1] else f'{var}: '
+                    
                     self.solicitudes_input.append({
                         'variable': var,
-                        'mensaje': f'Ingrese valor para {var}:'
+                        'mensaje': prompt,
+                        'salida_previa': list(self.salida_consola)  # Guardar salida hasta ahora
                     })
                 # Detener ejecución hasta recibir input
                 raise StopIteration("Esperando input del usuario")

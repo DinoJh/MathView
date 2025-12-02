@@ -9,8 +9,13 @@
 <body>
     <div class="container">
         <header>
-            <h1>🧮 Compilador Matemático</h1>
-            <p>Escribe tu código y compílalo</p>
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">📐</span>
+                    <h1>MathCompiler</h1>
+                </div>
+                <p class="subtitle">Compilador Matemático Interactivo</p>
+            </div>
         </header>
 
         <!-- Barra de estado -->
@@ -19,32 +24,129 @@
             <span id="estado-texto"></span>
         </div>
 
-        <div class="editor-container">
-            <!-- Editor de código -->
-            <div class="editor-section">
-                <h3>📝 Editor de Código</h3>
-                <textarea id="codigo" placeholder="Escribe tu código aquí...
+        <div class="main-layout">
+            <!-- Panel izquierdo: Editor -->
+            <div class="left-panel">
+                <div class="panel-header">
+                    <h3>📝 Editor de Código</h3>
+                    <div class="ejemplos-menu">
+                        <button class="btn-ejemplos" id="btn-ejemplos">
+                            <span>📚</span> Ejemplos
+                        </button>
+                        <div class="ejemplos-dropdown" id="ejemplos-dropdown">
+                            <button class="ejemplo-item" data-ejemplo="basico">
+                                <span class="ejemplo-icon">🔤</span>
+                                <div class="ejemplo-info">
+                                    <strong>Básico</strong>
+                                    <small>Variables y salida</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="condicional">
+                                <span class="ejemplo-icon">🔀</span>
+                                <div class="ejemplo-info">
+                                    <strong>Condicionales</strong>
+                                    <small>if/elif/else</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="bucle">
+                                <span class="ejemplo-icon">🔄</span>
+                                <div class="ejemplo-info">
+                                    <strong>Bucles</strong>
+                                    <small>while loops</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="input">
+                                <span class="ejemplo-icon">⌨️</span>
+                                <div class="ejemplo-info">
+                                    <strong>Entrada</strong>
+                                    <small>put() interactivo</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="grafico2d">
+                                <span class="ejemplo-icon">📈</span>
+                                <div class="ejemplo-info">
+                                    <strong>Gráfico 2D</strong>
+                                    <small>draw2d()</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="grafico3d">
+                                <span class="ejemplo-icon">🎲</span>
+                                <div class="ejemplo-info">
+                                    <strong>Gráfico 3D</strong>
+                                    <small>draw3d()</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="menu">
+                                <span class="ejemplo-icon">🎯</span>
+                                <div class="ejemplo-info">
+                                    <strong>Menú Interactivo</strong>
+                                    <small>Selector de gráficas</small>
+                                </div>
+                            </button>
+                            <button class="ejemplo-item" data-ejemplo="avanzado">
+                                <span class="ejemplo-icon">🚀</span>
+                                <div class="ejemplo-info">
+                                    <strong>Avanzado</strong>
+                                    <small>Programa completo</small>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="editor-wrapper">
+                    <textarea id="codigo" spellcheck="false" placeholder="Escribe tu código aquí...
+
 Ejemplo:
 int n = 10;
 pri('Hola Mundo');
 pri(n);"></textarea>
+                    <div class="editor-info">
+                        <span class="info-item">
+                            <span class="info-icon">📏</span>
+                            <span id="line-count">Líneas: 1</span>
+                        </span>
+                        <span class="info-item">
+                            <span class="info-icon">💾</span>
+                            <span>Ctrl+Enter para compilar</span>
+                        </span>
+                    </div>
+                </div>
                 
                 <div class="botones">
-                    <button id="btn-compilar" class="btn-primary">▶️ Compilar</button>
-                    <button id="btn-limpiar" class="btn-secondary">🗑️ Limpiar</button>
+                    <button id="btn-compilar" class="btn-primary">
+                        <span class="btn-icon">▶️</span>
+                        Compilar
+                    </button>
+                    <button id="btn-limpiar" class="btn-secondary">
+                        <span class="btn-icon">🗑️</span>
+                        Limpiar
+                    </button>
                 </div>
             </div>
 
-            <!-- Consola de salida -->
-            <div class="output-section">
-                <h3>💻 Consola de Salida</h3>
-                <div id="consola" class="consola">
-                    <div class="consola-placeholder">La salida aparecerá aquí...</div>
+            <!-- Panel derecho: Consola -->
+            <div class="right-panel">
+                <div class="panel-header">
+                    <h3>💻 Consola de Salida</h3>
+                    <button class="btn-clear-console" id="btn-clear-console" title="Limpiar consola">
+                        <span>🧹</span>
+                    </button>
                 </div>
-                <!-- Input en consola -->
-                <div id="consola-input" class="consola-input oculto">
-                    <span id="input-prompt"></span>
-                    <input type="text" id="input-valor" placeholder="Ingrese valor...">
+                
+                <div class="console-wrapper">
+                    <div id="consola" class="consola">
+                        <div class="consola-placeholder">
+                            <div class="placeholder-icon">💡</div>
+                            <div class="placeholder-text">La salida de tu programa aparecerá aquí</div>
+                            <div class="placeholder-hint">Escribe código y presiona "Compilar" o Ctrl+Enter</div>
+                        </div>
+                    </div>
+                    <!-- Input en consola -->
+                    <div id="consola-input" class="consola-input oculto">
+                        <span class="input-icon">▶</span>
+                        <input type="text" id="input-valor" placeholder="Ingrese valor...">
+                    </div>
                 </div>
             </div>
         </div>
@@ -53,15 +155,26 @@ pri(n);"></textarea>
         <div class="bottom-container">
             <!-- Sección de visualización -->
             <div id="visualizacion" class="visualizacion oculto">
-                <h3>📊 Visualización</h3>
-                <img id="grafico" alt="Gráfico generado">
+                <div class="section-header">
+                    <h3>📊 Visualización</h3>
+                    <div class="section-badge">Gráfico Generado</div>
+                </div>
+                <div class="viz-content">
+                    <img id="grafico" alt="Gráfico generado">
+                </div>
             </div>
 
             <!-- Tokens -->
             <div class="tokens-section">
-                <h3>🔍 Tokens Generados</h3>
+                <div class="section-header">
+                    <h3>🔍 Análisis Léxico</h3>
+                    <div class="section-badge" id="token-count">0 tokens</div>
+                </div>
                 <div id="tokens-output" class="tokens-output">
-                    <div class="tokens-placeholder">Los tokens aparecerán aquí después de compilar...</div>
+                    <div class="tokens-placeholder">
+                        <div class="placeholder-icon">🔤</div>
+                        <div class="placeholder-text">Los tokens aparecerán aquí</div>
+                    </div>
                 </div>
             </div>
         </div>
