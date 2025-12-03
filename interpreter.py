@@ -140,8 +140,16 @@ class Interpreter:
             # Esto permite que las condicionales controlen qué gráficas se dibujan
             self.ejecutar_codigo_secuencial()
 
+        except SyntaxError as e:
+            self.errores.append(f"❌ Error de sintaxis: {str(e)}")
+        except NameError as e:
+            self.errores.append(f"❌ Variable no definida: {str(e)}")
+        except ZeroDivisionError:
+            self.errores.append(f"❌ Error: División por cero")
+        except ValueError as e:
+            self.errores.append(f"❌ Error de valor: {str(e)}")
         except Exception as e:
-            self.errores.append(f"Error en ejecución: {str(e)}")
+            self.errores.append(f"❌ Error: {str(e)}")
 
         return self.get_result()
 
@@ -228,8 +236,17 @@ class Interpreter:
             except StopIteration:
                 # Se necesita input, detener ejecución
                 break
+            except SyntaxError as e:
+                self.errores.append(f"❌ Error de sintaxis en línea: {linea[:30]}...")
+                break
+            except NameError as e:
+                self.errores.append(f"❌ Variable no definida: {str(e)}")
+                break
+            except ZeroDivisionError:
+                self.errores.append(f"❌ División por cero en: {linea[:30]}...")
+                break
             except Exception as e:
-                self.errores.append(f"Error: {str(e)}")
+                self.errores.append(f"❌ Error: {str(e)}")
             
             i += 1
 
@@ -324,17 +341,29 @@ class Interpreter:
                     valor_limpio = valor[2:-2].strip()
                     self.variables[var] = valor_limpio
                 else:
-                    self.variables[var] = self.evaluar_expresion(valor)
+                    try:
+                        self.variables[var] = self.evaluar_expresion(valor)
+                    except Exception as e:
+                        self.errores.append(f"❌ Error al evaluar '{valor}': {str(e)}")
+                        self.variables[var] = 0
             else:
                 valor_default = 0 if tipo in ['int', 'dec'] else ""
                 self.variables[var] = valor_default
+        else:
+            self.errores.append(f"❌ Declaración mal formada: {linea}")
 
     def ejecutar_asignacion(self, linea):
         """n = 10; o n = n + 1;"""
         match = re.match(r'(\w+)\s*=\s*(.+)', linea)
         if match:
             var, expr = match.groups()
-            self.variables[var] = self.evaluar_expresion(expr)
+            try:
+                self.variables[var] = self.evaluar_expresion(expr)
+            except Exception as e:
+                self.errores.append(f"❌ Error en asignación: {str(e)}")
+                self.variables[var] = 0
+        else:
+            self.errores.append(f"❌ Asignación mal formada: {linea}")
 
     def ejecutar_pri(self, linea):
         """pri(n); o pri("texto");"""
@@ -482,6 +511,10 @@ class Interpreter:
         try:
             expr = str(expr).strip()
             
+            # Verificar si está vacía
+            if not expr:
+                raise ValueError("Expresión vacía")
+            
             # Reemplazar variables
             for var, val in self.variables.items():
                 expr = re.sub(r'\b' + re.escape(var) + r'\b', str(val), expr)
@@ -492,6 +525,14 @@ class Interpreter:
             resultado = eval(expr, {"__builtins__": {}}, env)
             
             return resultado
+        except ZeroDivisionError:
+            raise ZeroDivisionError("División por cero")
+        except NameError as e:
+            # Extraer el nombre de la variable
+            var_name = str(e).split("'")[1] if "'" in str(e) else "desconocida"
+            raise NameError(f"Variable '{var_name}' no está definida")
+        except SyntaxError:
+            raise SyntaxError(f"Sintaxis inválida en expresión: {expr}")
         except Exception as e:
             return expr
 

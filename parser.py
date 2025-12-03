@@ -25,7 +25,10 @@ class Parser:
             return False
 
     def analizar(self):
-        """Análisis permisivo - acepta casi cualquier estructura válida"""
+        """Análisis con detección mejorada de errores"""
+        
+        # Verificar errores comunes antes de parsear
+        self.verificar_errores_comunes()
         
         # Si hay funciones gráficas simples, validar básicamente
         tokens_str = ' '.join([t[0] for t in self.tokens])
@@ -35,7 +38,7 @@ class Parser:
             self.arbol.append("Código con funciones gráficas detectado")
             return {
                 "estado": "correcto ✅",
-                "errores": [],
+                "errores": self.errores,
                 "arbol": self.arbol
             }
         
@@ -46,10 +49,96 @@ class Parser:
                 self.avanzar()
 
         return {
-            "estado": "correcto ✅" if len(self.errores) < 3 else "con warnings ⚠️",
-            "errores": self.errores[:3],  # Solo primeros 3 errores
+            "estado": "correcto ✅" if len(self.errores) == 0 else "con errores ❌",
+            "errores": self.errores,
             "arbol": self.arbol
         }
+    
+    def verificar_errores_comunes(self):
+        """Detecta errores comunes antes del parsing"""
+        codigo_completo = ' '.join([t[0] for t in self.tokens])
+        
+        # 1. Detectar punto y coma duplicado
+        for i in range(len(self.tokens) - 1):
+            if self.tokens[i][1] == "PUNTO_COMA" and self.tokens[i+1][1] == "PUNTO_COMA":
+                self.errores.append("⚠️ Punto y coma duplicado en la línea")
+        
+        # 2. Verificar balance de paréntesis
+        parentesis_abiertos = sum(1 for t in self.tokens if t[1] == "PAR_IZQ")
+        parentesis_cerrados = sum(1 for t in self.tokens if t[1] == "PAR_DER")
+        if parentesis_abiertos > parentesis_cerrados:
+            self.errores.append("❌ Falta cerrar paréntesis ')' - Se abrieron más de los que se cerraron")
+        elif parentesis_cerrados > parentesis_abiertos:
+            self.errores.append("❌ Paréntesis ')' de más - Se cerraron más de los que se abrieron")
+        
+        # 3. Verificar balance de llaves
+        llaves_abiertas = sum(1 for t in self.tokens if t[1] == "LLAVE_IZQ")
+        llaves_cerradas = sum(1 for t in self.tokens if t[1] == "LLAVE_DER")
+        if llaves_abiertas > llaves_cerradas:
+            self.errores.append("❌ Falta cerrar llave '}' - Se abrieron más de las que se cerraron")
+        elif llaves_cerradas > llaves_abiertas:
+            self.errores.append("❌ Llave '}' de más - Se cerraron más de las que se abrieron")
+        
+        # 4. Verificar balance de corchetes
+        corchetes_abiertos = sum(1 for t in self.tokens if t[1] == "CORCH_IZQ")
+        corchetes_cerrados = sum(1 for t in self.tokens if t[1] == "CORCH_DER")
+        if corchetes_abiertos > corchetes_cerrados:
+            self.errores.append("❌ Falta cerrar corchete ']'")
+        elif corchetes_cerrados > corchetes_abiertos:
+            self.errores.append("❌ Corchete ']' de más")
+        
+        # 5. Detectar operadores sueltos
+        operadores = ["MAS", "MENOS", "MULT", "DIV", "ASIGNACION", "POTENCIA"]
+        for i in range(len(self.tokens) - 1):
+            if self.tokens[i][1] in operadores and self.tokens[i+1][1] == "PUNTO_COMA":
+                self.errores.append(f"❌ Operador '{self.tokens[i][0]}' sin operando - Falta expresión después del operador")
+        
+        # 6. Detectar punto y coma antes de llave de cierre
+        for i in range(len(self.tokens) - 1):
+            if self.tokens[i][1] == "PUNTO_COMA" and self.tokens[i+1][1] == "LLAVE_DER":
+                # Esto es válido, no es error
+                pass
+        
+        # 7. Detectar declaraciones incompletas
+        for i in range(len(self.tokens) - 2):
+            if self.tokens[i][1] in ["TIPO_ENTERO", "TIPO_DECIMAL", "TIPO_CADENA", "TIPO_ECUACION"]:
+                if self.tokens[i+1][1] == "PUNTO_COMA":
+                    self.errores.append(f"❌ Declaración incompleta: falta nombre de variable después de '{self.tokens[i][0]}'")
+        
+        # 8. Detectar asignación sin valor
+        for i in range(len(self.tokens) - 1):
+            if self.tokens[i][1] == "ASIGNACION" and self.tokens[i+1][1] == "PUNTO_COMA":
+                self.errores.append("❌ Asignación sin valor: falta expresión después de '='")
+        
+        # 9. Detectar comas sueltas
+        for i in range(len(self.tokens)):
+            if self.tokens[i][1] == "COMA":
+                # Verificar que no esté al inicio o al final de una expresión
+                if i == 0 or i == len(self.tokens) - 1:
+                    self.errores.append("❌ Coma mal ubicada")
+                elif self.tokens[i+1][1] in ["PUNTO_COMA", "PAR_DER"]:
+                    self.errores.append("❌ Coma seguida de cierre - Falta argumento")
+        
+        # 10. Detectar palabras clave mal usadas
+        for i in range(len(self.tokens)):
+            if self.tokens[i][1] in ["CONDICIONAL_IF", "BUCLE_WHILE"]:
+                if i + 1 >= len(self.tokens) or self.tokens[i+1][1] != "PAR_IZQ":
+                    self.errores.append(f"❌ '{self.tokens[i][0]}' debe ir seguido de paréntesis '('")
+        
+        # 11. Detectar funciones sin paréntesis
+        funciones = ["FUNCION_PRI", "FUNCION_PUT", "FUNCION_DIBUJO_2D", "FUNCION_DIBUJO_3D"]
+        for i in range(len(self.tokens)):
+            if self.tokens[i][1] in funciones:
+                if i + 1 >= len(self.tokens) or self.tokens[i+1][1] != "PAR_IZQ":
+                    self.errores.append(f"❌ Función '{self.tokens[i][0]}' requiere paréntesis '()'")
+        
+        # 12. Detectar múltiples errores de punto y coma
+        punto_coma_count = sum(1 for t in self.tokens if t[1] == "PUNTO_COMA")
+        if punto_coma_count == 0 and len(self.tokens) > 3:
+            # Solo advertir si hay código significativo
+            tiene_codigo = any(t[1] in ["IDENTIFICADOR", "NUMERO"] for t in self.tokens)
+            if tiene_codigo and 'draw' not in codigo_completo:
+                self.errores.append("⚠️ Advertencia: No se encontraron punto y coma ';' - Las instrucciones deben terminar con ';'")
 
     def instruccion(self):
         lexema, tipo = self.actual()
