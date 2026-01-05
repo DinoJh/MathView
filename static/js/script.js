@@ -23,7 +23,8 @@ const tokensOutput = document.getElementById('tokens-output');
 const tokenCount = document.getElementById('token-count');
 const lineCount = document.getElementById('line-count');
 
-// Ejemplos predefinidos
+// ===== EJEMPLOS =====
+
 const ejemplos = {
     basico: `int n = 10;
 pri("Hola Mundo");
@@ -110,7 +111,8 @@ if(suma > 50) {
 }`
 };
 
-// Event Listeners
+// ===== EVENT LISTENERS =====
+
 btnCompilar.addEventListener('click', () => compilar(true));
 btnLimpiar.addEventListener('click', limpiar);
 btnClearConsole.addEventListener('click', limpiarSoloConsola);
@@ -121,7 +123,6 @@ btnEjemplos.addEventListener('click', (e) => {
     ejemplosDropdown.classList.toggle('show');
 });
 
-// Cerrar dropdown al hacer click fuera
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.ejemplos-menu')) {
         ejemplosDropdown.classList.remove('show');
@@ -151,6 +152,17 @@ codigoTextarea.addEventListener('keydown', (e) => {
         e.preventDefault();
         compilar(true);
     }
+    
+    // Tab para indentación
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = codigoTextarea.selectionStart;
+        const end = codigoTextarea.selectionEnd;
+        const value = codigoTextarea.value;
+        
+        codigoTextarea.value = value.substring(0, start) + '    ' + value.substring(end);
+        codigoTextarea.selectionStart = codigoTextarea.selectionEnd = start + 4;
+    }
 });
 
 // Actualizar contador de líneas
@@ -161,6 +173,8 @@ function actualizarLineCount() {
     lineCount.textContent = `Líneas: ${lines}`;
 }
 
+// ===== FUNCIONES DE COMPILACIÓN =====
+
 function compilar(esNuevaCompilacion = false) {
     const codigo = codigoTextarea.value.trim();
     
@@ -169,19 +183,18 @@ function compilar(esNuevaCompilacion = false) {
         return;
     }
     
-    // Si es una nueva compilación, resetear inputs
     if (esNuevaCompilacion) {
         userInputs = [];
         codigoActual = codigo;
         salidaPreviaGuardada = [];
         limpiarSoloConsola();
+        // ARREGLO: Ocultar visualización al iniciar nueva compilación
+        visualizacion.classList.add('oculto');
     }
     
-    // Mostrar estado de compilación
     mostrarEstado('advertencia', '⏳ Compilando...');
     btnCompilar.disabled = true;
     
-    // Enviar petición
     fetch('/compilar', {
         method: 'POST',
         headers: {
@@ -206,12 +219,10 @@ function compilar(esNuevaCompilacion = false) {
 }
 
 function procesarRespuesta(data) {
-    // Mostrar tokens solo en primera compilación
     if (data.tokens && userInputs.length === 0) {
         mostrarTokens(data.tokens);
     }
     
-    // Manejar diferentes estados
     switch(data.estado) {
         case 'correcto':
             mostrarEstado('correcto', '✅ Compilación exitosa');
@@ -228,10 +239,8 @@ function procesarRespuesta(data) {
         case 'necesita_input':
             if (!esperandoInput) {
                 esperandoInput = true;
-                // Guardar la salida previa antes de solicitar input
                 if (data.solicitudes[0].salida_previa) {
                     salidaPreviaGuardada = data.solicitudes[0].salida_previa;
-                    // Mostrar la salida previa
                     mostrarSalidaPrevia(salidaPreviaGuardada);
                 }
                 solicitarInput(data.solicitudes[0]);
@@ -251,65 +260,51 @@ function procesarRespuesta(data) {
             break;
             
         case 'error':
-            mostrarEstado('error', `❌ ${data.mensaje}`);
-            agregarLineaConsola(data.mensaje, 'error');
-            if (data.traceback) {
-                console.error(data.traceback);
+            mostrarEstado('error', '❌ Error');
+            if (data.errores) {
+                mostrarErrores(data.errores);
+            } else if (data.mensaje) {
+                agregarLineaConsola(data.mensaje, 'error');
             }
             esperandoInput = false;
             break;
     }
 }
 
-function mostrarSalidaPrevia(salida) {
-    // Limpiar consola y mostrar salida previa
-    limpiarSoloConsola();
-    salida.forEach(linea => {
-        if (linea.trim()) {
-            agregarLineaConsola(linea, 'output');
-        }
-    });
-}
-
 function mostrarSalida(data) {
-    // Mostrar salida del programa
     if (data.salida) {
         const lineas = data.salida.split('\n');
         lineas.forEach(linea => {
             if (linea.trim()) {
-                agregarLineaConsola(linea, 'output');
+                agregarLineaConsola(linea, 'salida');
             }
         });
     }
     
-    // Mostrar errores si hay
     if (data.errores && data.errores.length > 0) {
         data.errores.forEach(error => {
             agregarLineaConsola(error, 'error');
         });
     }
     
-    // Mostrar imagen si hay
+    // ARREGLO: Solo mostrar imagen si existe, sino ocultarla
     if (data.imagen) {
-        visualizacion.classList.remove('oculto');
-        grafico.src = `data:image/png;base64,${data.imagen}`;
+        mostrarImagen(data.imagen);
     } else {
         visualizacion.classList.add('oculto');
     }
 }
 
-function mostrarErrores(errores) {
-    errores.forEach(error => {
-        agregarLineaConsola(error, 'error');
+function mostrarSalidaPrevia(lineas) {
+    lineas.forEach(linea => {
+        if (linea.trim()) {
+            agregarLineaConsola(linea, 'salida');
+        }
     });
 }
 
 function solicitarInput(solicitud) {
-    // Usar el mensaje personalizado (último pri())
-    const mensaje = solicitud.mensaje || `${solicitud.variable}: `;
-    agregarLineaConsola(mensaje, 'output');
-    
-    inputValor.value = '';
+    agregarLineaConsola(solicitud.mensaje, 'prompt');
     consolaInput.classList.remove('oculto');
     inputValor.focus();
 }
@@ -321,44 +316,76 @@ function enviarInput() {
         return;
     }
     
-    // Mostrar lo que se ingresó
-    agregarLineaConsola(`▶ ${valor}`, 'input');
-    
-    // Guardar el input
+    agregarLineaConsola(`> ${valor}`, 'input');
     userInputs.push(valor);
-    
-    // Ocultar el input
-    consolaInput.classList.add('oculto');
     inputValor.value = '';
+    consolaInput.classList.add('oculto');
+    esperandoInput = false;
     
-    // Recompilar con el nuevo input (NO es nueva compilación)
-    setTimeout(() => {
-        esperandoInput = false;
-        compilar(false);
-    }, 100);
+    compilar(false);
 }
 
-function agregarLineaConsola(texto, tipo = 'output') {
-    // Limpiar placeholder si existe
+function mostrarErrores(errores) {
+    errores.forEach(error => {
+        agregarLineaConsola(error, 'error');
+    });
+}
+
+function mostrarImagen(imagenBase64) {
+    visualizacion.classList.remove('oculto');
+    grafico.src = `data:image/png;base64,${imagenBase64}`;
+}
+
+function agregarLineaConsola(texto, tipo = 'salida') {
     const placeholder = consola.querySelector('.consola-placeholder');
     if (placeholder) {
         placeholder.remove();
     }
     
     const linea = document.createElement('div');
-    linea.className = `consola-line ${tipo}`;
+    linea.className = `linea-consola ${tipo}`;
     linea.textContent = texto;
     consola.appendChild(linea);
     consola.scrollTop = consola.scrollHeight;
 }
 
-function limpiarSoloConsola() {
-    consola.innerHTML = '';
-    consolaInput.classList.add('oculto');
+function mostrarTokens(tokens) {
+    tokensOutput.innerHTML = '';
+    tokenCount.textContent = `${tokens.length} tokens`;
+    
+    tokens.forEach(([lexema, tipo], index) => {
+        const tokenItem = document.createElement('div');
+        tokenItem.className = 'token-item';
+        
+        // Asignar clase según tipo
+        if (tipo.includes('KEYWORD') || tipo.includes('CONDICIONAL') || tipo.includes('BUCLE')) {
+            tokenItem.classList.add('keyword');
+        } else if (tipo.includes('FUNCION')) {
+            tokenItem.classList.add('function');
+        } else if (tipo.includes('TIPO')) {
+            tokenItem.classList.add('type');
+        } else if (tipo === 'NUMERO') {
+            tokenItem.classList.add('number');
+        } else if (tipo === 'CADENA') {
+            tokenItem.classList.add('string');
+        } else if (tipo === 'IDENTIFICADOR') {
+            tokenItem.classList.add('identifier');
+        } else {
+            tokenItem.classList.add('operator');
+        }
+        
+        tokenItem.innerHTML = `
+            <span class="token-lexema">${lexema}</span>
+            <span class="token-tipo">${tipo}</span>
+        `;
+        
+        tokensOutput.appendChild(tokenItem);
+    });
 }
 
 function mostrarEstado(tipo, mensaje) {
     estadoBar.className = `estado-bar ${tipo}`;
+    estadoBar.classList.remove('oculto');
     
     const iconos = {
         'correcto': '✅',
@@ -366,42 +393,42 @@ function mostrarEstado(tipo, mensaje) {
         'advertencia': '⚠️'
     };
     
-    estadoIcono.textContent = iconos[tipo] || '📋';
+    estadoIcono.textContent = iconos[tipo] || '';
     estadoTexto.textContent = mensaje;
-    estadoBar.classList.remove('oculto');
+    
+    setTimeout(() => {
+        if (tipo !== 'error' && tipo !== 'advertencia') {
+            estadoBar.classList.add('oculto');
+        }
+    }, 5000);
 }
 
-function mostrarTokens(tokens) {
-    tokensOutput.innerHTML = '';
-    
-    tokens.forEach(([lexema, tipo]) => {
-        const tokenItem = document.createElement('div');
-        tokenItem.className = 'token-item';
-        tokenItem.innerHTML = `<strong>${tipo}</strong>: ${lexema}`;
-        tokensOutput.appendChild(tokenItem);
-    });
-    
-    tokenCount.textContent = `${tokens.length} tokens`;
+function limpiarSoloConsola() {
+    consola.innerHTML = `
+        <div class="consola-placeholder">
+            <div class="placeholder-icon">💡</div>
+            <div class="placeholder-text">La salida de tu programa aparecerá aquí</div>
+            <div class="placeholder-hint">Escribe código y presiona "Compilar" o Ctrl+Enter</div>
+        </div>
+    `;
+    // ARREGLO: Ocultar visualización al limpiar consola
+    visualizacion.classList.add('oculto');
 }
 
 function limpiar() {
     codigoTextarea.value = '';
     limpiarSoloConsola();
-    estadoBar.classList.add('oculto');
     visualizacion.classList.add('oculto');
-    tokensOutput.innerHTML = '<div class="tokens-placeholder"><div class="placeholder-icon">🔤</div><div class="placeholder-text">Los tokens aparecerán aquí</div></div>';
+    tokensOutput.innerHTML = `
+        <div class="tokens-placeholder">
+            <div class="placeholder-icon">🔤</div>
+            <div class="placeholder-text">Los tokens aparecerán aquí</div>
+        </div>
+    `;
     tokenCount.textContent = '0 tokens';
+    estadoBar.classList.add('oculto');
+    consolaInput.classList.add('oculto');
     userInputs = [];
-    codigoActual = '';
-    salidaPreviaGuardada = [];
     esperandoInput = false;
     actualizarLineCount();
 }
-
-// Código inicial de ejemplo
-window.addEventListener('DOMContentLoaded', () => {
-    if (!codigoTextarea.value) {
-        codigoTextarea.value = ejemplos.basico;
-    }
-    actualizarLineCount();
-});
